@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block title %}User Settings - NixNAS{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <h2>⚙️ User Settings</h2>
+</header>
+
+<div class="card">
+    <h3>🏠 Home Directories</h3>
+    <div id="home-settings-container" hx-get="/api/web/users/home-settings" hx-trigger="load">
+        <p style="text-align: center;"><span class="spinner"></span> Loading...</p>
+    </div>
+</div>
+{% endblock %}

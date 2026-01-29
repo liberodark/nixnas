@@ -1,0 +1,30 @@
+{% if disks.is_empty() %}
+<div style="text-align: center; padding: 1rem; border: 1px solid var(--pico-muted-border-color); border-radius: 0.375rem;">
+    <p style="color: var(--pico-muted-color); margin-bottom: 0.5rem;">
+        ⚠️ No available disks found.
+    </p>
+    <small>All disks are either mounted or in use by the system.</small>
+</div>
+{% else %}
+<div class="disk-selector">
+    {% for disk in disks %}
+    <label class="disk-option">
+        <input type="checkbox" class="disk-checkbox" value="{{ disk.by_id }}" onchange="updateDevicesField(this)">
+        <div class="disk-info">
+            <strong>{{ disk.name }}</strong>
+            <span class="disk-details">{{ disk.size_human }} — {{ disk.model }}</span>
+            <code class="disk-by-id">{{ disk.by_id }}</code>
+        </div>
+    </label>
+    {% endfor %}
+</div>
+<script>
+function updateDevicesField(checkbox) {
+    const form = checkbox.closest('form');
+    const hiddenField = form.querySelector('input[name="devices"]');
+    const checkboxes = form.querySelectorAll('.disk-checkbox:checked');
+    const values = Array.from(checkboxes).map(cb => cb.value);
+    hiddenField.value = values.join(',');
+}
+</script>
+{% endif %}

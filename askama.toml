@@ -1,0 +1,4 @@
+[general]
+dirs = ["templates"]
+
+# Custom filters are defined in the code

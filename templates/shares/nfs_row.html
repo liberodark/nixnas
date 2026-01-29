@@ -1,0 +1,20 @@
+<tr id="export-{{ export.id }}">
+    <td><code>{{ export.path }}</code></td>
+    <td>
+        {% for client in export.clients %}
+        <span class="badge badge-info">{{ client.host }}</span>
+        {% endfor %}
+    </td>
+    <td>
+        <div class="btn-group">
+            <button class="small outline secondary" 
+                    name="delete-btn"
+                    hx-delete="/api/web/nfs/exports/{{ export.id }}"
+                    hx-target="#export-{{ export.id }}"
+                    hx-swap="outerHTML"
+                    hx-confirm="Delete export '{{ export.path }}'?">
+                🗑️
+            </button>
+        </div>
+    </td>
+</tr>

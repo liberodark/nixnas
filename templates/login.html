@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - NixNAS</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="login-page">
+    <div class="login-container">
+        <div class="login-header">
+            <h1>🗄️ NixNAS</h1>
+            <p>Sign in to manage your NAS</p>
+        </div>
+        
+        <div id="error-message" class="error-message"></div>
+        
+        {% if needs_setup %}
+        <article style="background: #3b82f620; border-color: #3b82f6;">
+            <p>👋 Welcome! Set up your admin password to get started.</p>
+        </article>
+        {% endif %}
+        
+        <form id="login-form">
+            <label>
+                Username
+                <input type="text" name="username" value="admin" required autofocus>
+            </label>
+            <label>
+                Password
+                <input type="password" name="password" required 
+                       placeholder="{% if needs_setup %}Choose a password{% else %}Enter password{% endif %}">
+            </label>
+            <button type="submit">
+                {% if needs_setup %}Set Password & Login{% else %}Sign In{% endif %}
+            </button>
+        </form>
+    </div>
+    
+    <script>
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const form = e.target;
+            const errorDiv = document.getElementById('error-message');
+            const submitBtn = form.querySelector('button[type="submit"]');
+            
+            const data = {
+                username: form.username.value,
+                password: form.password.value
+            };
+            
+            try {
+                submitBtn.setAttribute('aria-busy', 'true');
+                submitBtn.disabled = true;
+                
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok && result.token) {
+                    // Store token in cookie
+                    document.cookie = `token=${result.token}; path=/; max-age=86400; SameSite=Strict`;
+                    // Redirect to dashboard
+                    window.location.href = '/';
+                } else {
+                    // Handle rate limiting with countdown
+                    if (result.locked_seconds) {
+                        startLockoutCountdown(result.locked_seconds, errorDiv, submitBtn);
+                    } else {
+                        errorDiv.textContent = result.error || 'Login failed';
+                        errorDiv.classList.add('show');
+                        submitBtn.disabled = false;
+                    }
+                }
+            } catch (err) {
+                errorDiv.textContent = 'Connection error';
+                errorDiv.classList.add('show');
+                submitBtn.disabled = false;
+            } finally {
+                submitBtn.setAttribute('aria-busy', 'false');
+            }
+        });
+        
+        function startLockoutCountdown(seconds, errorDiv, submitBtn) {
+            submitBtn.disabled = true;
+            let remaining = seconds;
+            
+            function updateMessage() {
+                const mins = Math.floor(remaining / 60);
+                const secs = remaining % 60;
+                const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+                errorDiv.innerHTML = `🔒 Too many failed attempts. Try again in <strong>${timeStr}</strong>`;
+                errorDiv.classList.add('show');
+            }
+            
+            updateMessage();
+            
+            const interval = setInterval(() => {
+                remaining--;
+                if (remaining <= 0) {
+                    clearInterval(interval);
+                    errorDiv.textContent = 'You can try again now.';
+                    submitBtn.disabled = false;
+                } else {
+                    updateMessage();
+                }
+            }, 1000);
+        }
+    </script>
+</body>
+</html>

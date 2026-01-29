@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block title %}S.M.A.R.T. - NixNAS{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <h2>🔍 S.M.A.R.T. Health</h2>
+    <div class="btn-group">
+        <button onclick="location.reload()" class="outline">
+            🔄 Refresh
+        </button>
+    </div>
+</header>
+
+{% if !smart_available %}
+<article style="background: #f59e0b20; border-color: #f59e0b;">
+    <p>⚠️ <strong>smartmontools not available.</strong></p>
+    <p>Add to your NixOS configuration:</p>
+    <pre><code>environment.systemPackages = [ pkgs.smartmontools ];</code></pre>
+</article>
+{% else %}
+
+<div class="card" style="margin-bottom: 1rem;">
+    <p>💡 <strong>SMART Monitoring:</strong> Configure per-disk monitoring to receive email notifications for errors or high temperatures.</p>
+</div>
+
+{% if disks.is_empty() %}
+<article>
+    <p>No disks found.</p>
+</article>
+{% else %}
+
+<div class="disks-grid">
+    {% for disk in disks %}
+    <div class="card">
+        <header style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h3 style="margin: 0;">
+                    <code>{{ disk.path }}</code>
+                    {% if disk.health_ok %}
+                    <span class="badge badge-success">PASSED</span>
+                    {% else %}
+                    <span class="badge badge-error">{{ disk.health }}</span>
+                    {% endif %}
+                </h3>
+                <small style="color: var(--pico-muted-color);">{{ disk.model }}</small>
+            </div>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                {% if disk.monitoring_enabled %}
+                <span class="badge badge-success">📊 Monitoring ON</span>
+                {% else %}
+                <span class="badge badge-secondary">📊 Monitoring OFF</span>
+                {% endif %}
+                {% if disk.rotational %}
+                <span class="badge badge-info">🔄 HDD</span>
+                {% else %}
+                <span class="badge badge-success">⚡ SSD</span>
+                {% endif %}
+            </div>
+        </header>
+        
+        <div class="compact-stats-grid">
+            <div class="stat-card">
+                <div class="label">Temperature</div>
+                <div class="value">{{ disk.temperature }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Power On</div>
+                <div class="value">{{ disk.power_on_hours }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Power Cycles</div>
+                <div class="value">{{ disk.power_cycles }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Size</div>
+                <div class="value">{{ disk.size_human }}</div>
+            </div>
+        </div>
+        
+        <details>
+            <summary>Disk Info</summary>
+            <table>
+                <tr><td>Model</td><td><strong>{{ disk.model }}</strong></td></tr>
+                <tr><td>Serial</td><td><code>{{ disk.serial }}</code></td></tr>
+                <tr><td>Type</td><td>{% if disk.rotational %}HDD{% else %}SSD{% endif %}</td></tr>
+            </table>
+        </details>
+        
+        <details>
+            <summary>S.M.A.R.T. Attributes</summary>
+            <div id="smart-details-{{ disk.name }}">
+                <button class="small outline"
+                        hx-get="/api/web/smart/{{ disk.name }}"
+                        hx-target="#smart-details-{{ disk.name }}"
+                        hx-swap="innerHTML">
+                    Load Attributes
+                </button>
+            </div>
+        </details>
+        
+        {% if !disk.is_virtual %}
+        <details>
+            <summary>⚙️ Monitoring Configuration</summary>
+            <div id="smart-config-{{ disk.name }}">
+                <button class="small outline"
+                        hx-get="/api/web/smart/{{ disk.name }}/config"
+                        hx-target="#smart-config-{{ disk.name }}"
+                        hx-swap="innerHTML">
+                    Load Configuration
+                </button>
+            </div>
+        </details>
+        {% endif %}
+        
+        <footer>
+            <div class="btn-group">
+                <button class="small outline"
+                        hx-post="/api/web/smart/{{ disk.name }}/test/short"
+                        hx-target="#test-result-{{ disk.name }}"
+                        hx-swap="innerHTML"
+                        hx-disabled-elt="this">
+                    <span class="htmx-indicator spinner"></span>
+                    Short Test
+                </button>
+                <button class="small outline secondary"
+                        hx-post="/api/web/smart/{{ disk.name }}/test/long"
+                        hx-target="#test-result-{{ disk.name }}"
+                        hx-swap="innerHTML"
+                        hx-disabled-elt="this"
+                        hx-confirm="Long test can take several hours. Continue?">
+                    Long Test
+                </button>
+            </div>
+            <div id="test-result-{{ disk.name }}" style="margin-top: 0.5rem;"></div>
+        </footer>
+    </div>
+    {% endfor %}
+</div>
+
+{% endif %}
+{% endif %}
+
+{% endblock %}

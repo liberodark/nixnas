@@ -1,0 +1,828 @@
+{% extends "base.html" %}
+
+{% block title %}ZFS Pools - NixNAS{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <h2>🗃️ ZFS Pools</h2>
+    <div class="btn-group">
+        <button onclick="location.reload()" class="outline">
+            🔄 Refresh
+        </button>
+        <button class="outline" onclick="document.getElementById('import-modal').showModal(); htmx.ajax('GET', '/api/web/zfs/importable', '#importable-list');">
+            📥 Import Pool
+        </button>
+        <button onclick="document.getElementById('create-modal').showModal(); htmx.ajax('GET', '/api/web/storage/available-disks', '#zfs-disk-selector');">
+            ➕ Create Pool
+        </button>
+    </div>
+</header>
+
+{% if !zfs_available %}
+<article class="card" style="background: #eab30820; border-color: #eab308;">
+    <p>⚠️ ZFS is not available on this system.</p>
+    <p>Add to your NixOS configuration:</p>
+    <pre><code>boot.supportedFilesystems = [ "zfs" ];
+networking.hostId = "$(head -c 8 /etc/machine-id)";</code></pre>
+</article>
+{% else %}
+
+{% if pools.is_empty() %}
+<div class="card">
+    <p style="text-align: center; color: var(--pico-muted-color);">
+        No ZFS pools found. Create a new pool or import an existing one.
+    </p>
+</div>
+{% else %}
+
+<div id="pools-container">
+    {% for pool in pools %}
+    <div class="card" id="pool-{{ pool.name }}" style="margin-bottom: 1rem;">
+        <header style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+            <h3 style="margin: 0;">
+                {{ pool.name }}
+                {% if pool.health == "ONLINE" %}
+                <span class="badge badge-success">{{ pool.health }}</span>
+                {% else %}
+                <span class="badge badge-warning">{{ pool.health }}</span>
+                {% endif %}
+            </h3>
+            <div class="btn-group">
+                {% if pool.scrub_in_progress %}
+                <button class="small outline secondary"
+                        hx-post="/api/web/zfs/pools/{{ pool.name }}/scrub/stop"
+                        hx-target="#pool-actions-{{ pool.name }}"
+                        hx-swap="innerHTML">
+                    ⏹️ Stop Scrub
+                </button>
+                {% else %}
+                <button class="small outline"
+                        hx-post="/api/web/zfs/pools/{{ pool.name }}/scrub"
+                        hx-target="#pool-actions-{{ pool.name }}"
+                        hx-swap="innerHTML">
+                    🔍 Scrub
+                </button>
+                {% endif %}
+                <button class="small outline"
+                        hx-post="/api/web/zfs/pools/{{ pool.name }}/clear"
+                        hx-target="#pool-actions-{{ pool.name }}"
+                        hx-swap="innerHTML">
+                    🧹 Clear Errors
+                </button>
+                <button class="small outline"
+                        onclick="openZfsAddDeviceModal('{{ pool.name }}')">
+                    💾 Add Device
+                </button>
+                <button class="small outline"
+                        onclick="openPropertiesModal('{{ pool.name }}')">
+                    ⚙️ Properties
+                </button>
+                <button class="small outline secondary"
+                        hx-post="/api/web/zfs/pools/{{ pool.name }}/export"
+                        hx-target="#pool-{{ pool.name }}"
+                        hx-swap="outerHTML"
+                        hx-confirm="Export pool '{{ pool.name }}'? It will be unmounted.">
+                    📤 Export
+                </button>
+                <button class="small outline secondary"
+                        hx-delete="/api/web/zfs/pools/{{ pool.name }}"
+                        hx-target="#pool-{{ pool.name }}"
+                        hx-swap="outerHTML"
+                        hx-confirm="⚠️ DANGER: DESTROY pool '{{ pool.name }}'? ALL DATA WILL BE LOST!">
+                    🗑️ Destroy
+                </button>
+            </div>
+        </header>
+        
+        <div id="pool-actions-{{ pool.name }}"></div>
+        
+        <div class="compact-stats-grid">
+            <div class="stat-card">
+                <div class="label">Size</div>
+                <div class="value">{{ pool.size_human }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Used</div>
+                <div class="value">{{ pool.used_human }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Free</div>
+                <div class="value">{{ pool.free_human }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Fragmentation</div>
+                <div class="value">{{ pool.fragmentation }}%</div>
+            </div>
+        </div>
+        
+        <progress value="{{ pool.capacity }}" max="100" style="width: 100%;"></progress>
+        <small>{{ pool.capacity }}% used</small>
+        
+        <!-- Pool Status -->
+        <details style="margin-top: 1rem;">
+            <summary>📊 Pool Status</summary>
+            <div id="pool-status-{{ pool.name }}" 
+                 hx-get="/api/web/zfs/pools/{{ pool.name }}/status" 
+                 hx-trigger="revealed"
+                 style="background: var(--pico-background-color); padding: 1rem; border-radius: 0.375rem; overflow-x: auto;">
+                <span class="spinner"></span> Loading status...
+            </div>
+        </details>
+        
+        <!-- Datasets -->
+        <details style="margin-top: 1rem;">
+            <summary>📁 Datasets ({{ pool.datasets.len() }})</summary>
+            <div style="display: flex; justify-content: flex-end; margin-bottom: 0.5rem;">
+                <button class="small outline" onclick="openCreateDatasetModal('{{ pool.name }}')">
+                    ➕ Create Dataset
+                </button>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Used</th>
+                        <th>Available</th>
+                        <th>Mountpoint</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ds in pool.datasets %}
+                    <tr>
+                        <td><code>{{ ds.name }}</code></td>
+                        <td>{{ ds.used_human }}</td>
+                        <td>{{ ds.available_human }}</td>
+                        <td><code>{{ ds.mountpoint }}</code></td>
+                        <td>
+                            <div class="btn-group">
+                                <button class="small outline"
+                                        onclick="openSnapshotModal('{{ ds.name }}')">
+                                    📸
+                                </button>
+                                {% if ds.name != pool.name %}
+                                <button class="small outline secondary"
+                                        hx-delete="/api/web/zfs/datasets/delete/{{ ds.name }}"
+                                        hx-swap="outerHTML"
+                                        hx-target="closest tr"
+                                        hx-confirm="Delete dataset '{{ ds.name }}' and ALL its snapshots?">
+                                    🗑️
+                                </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </details>
+        
+        <!-- Snapshots -->
+        <details style="margin-top: 1rem;">
+            <summary>📸 Snapshots ({{ pool.snapshots.len() }})</summary>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Used</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for snap in pool.snapshots %}
+                    <tr>
+                        <td><code>{{ snap.name }}</code></td>
+                        <td>{{ snap.used_human }}</td>
+                        <td>{{ snap.creation }}</td>
+                        <td>
+                            <div class="btn-group">
+                                {% if snap.mountpoint.is_some() %}
+                                <button class="small"
+                                        hx-post="/api/web/zfs/snapshots/unmount/{{ snap.name }}"
+                                        hx-target="#snapshot-mount-result"
+                                        hx-swap="innerHTML"
+                                        title="Unmount snapshot ({{ snap.mountpoint.as_ref().unwrap() }})">
+                                    🔓
+                                </button>
+                                {% else %}
+                                <button class="small outline"
+                                        hx-post="/api/web/zfs/snapshots/mount/{{ snap.name }}"
+                                        hx-target="#snapshot-mount-result"
+                                        hx-swap="innerHTML"
+                                        title="Mount snapshot for browsing">
+                                    📂
+                                </button>
+                                {% endif %}
+                                <button class="small outline"
+                                        hx-post="/api/web/zfs/snapshots/rollback/{{ snap.name }}"
+                                        hx-swap="none"
+                                        hx-confirm="Rollback to '{{ snap.name }}'? Current data will be lost!">
+                                    ⏪
+                                </button>
+                                <button class="small outline secondary"
+                                        hx-delete="/api/web/zfs/snapshots/delete/{{ snap.name }}"
+                                        hx-target="closest tr"
+                                        hx-swap="outerHTML"
+                                        hx-confirm="Delete snapshot '{{ snap.name }}'?">
+                                    🗑️
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <div id="snapshot-mount-result" style="margin-top: 1rem;"></div>
+        </details>
+    </div>
+    {% endfor %}
+</div>
+
+{% endif %}
+
+<!-- ZFS Settings Section -->
+<div class="card" style="margin-top: 1.5rem;">
+    <header style="margin-bottom: 1rem;">
+        <h3 style="margin: 0;">⚙️ ZFS Service Settings</h3>
+    </header>
+    
+    <div id="zfs-settings-container" hx-get="/api/web/zfs/settings" hx-trigger="load">
+        <span class="spinner"></span> Loading settings...
+    </div>
+</div>
+
+<!-- Snapshot Policies Section -->
+<div class="card" style="margin-top: 1.5rem;">
+    <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3 style="margin: 0;">⏰ Automatic Snapshots</h3>
+        <button class="small" onclick="document.getElementById('policy-modal').showModal()">
+            ➕ Create Policy
+        </button>
+    </header>
+    
+    <div id="policies-list" hx-get="/api/web/zfs/policies" hx-trigger="load, refresh from:body">
+        <span class="spinner"></span> Loading policies...
+    </div>
+    
+    <details style="margin-top: 1rem;">
+        <summary>How it works</summary>
+        <p style="font-size: 0.9rem; color: var(--pico-muted-color);">
+            Snapshot policies use <strong>systemd timers</strong> for automatic ZFS snapshots and pruning.
+            After creating policies, apply the configuration to activate them.
+        </p>
+        <p style="font-size: 0.9rem; color: var(--pico-muted-color);">
+            <strong>Naming:</strong> <code>dataset@daily_20240115T120000</code><br>
+            <strong>Schedule:</strong> hourly (every hour), daily (midnight), weekly (Sunday), monthly (1st), yearly (Jan 1st)
+        </p>
+        <p style="font-size: 0.9rem; color: var(--pico-muted-color);">
+            <strong>Check timers:</strong> <code>systemctl list-timers 'zfs-snap-*'</code><br>
+            <strong>Manual run:</strong> <code>zfs-snap pool/data daily 7 true</code>
+        </p>
+    </details>
+</div>
+
+{% endif %}
+
+<!-- Policy Modal -->
+<dialog id="policy-modal">
+    <article style="max-width: 500px;">
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('policy-modal').close()"></button>
+            <h3>⏰ Create Snapshot Policy</h3>
+        </header>
+        <form hx-post="/api/web/zfs/policies" 
+              hx-target="#policy-result"
+              hx-disabled-elt="#create-policy-btn">
+            <label>
+                Policy Name
+                <input type="text" name="name" required placeholder="daily-backups">
+            </label>
+            
+            <label>
+                Dataset
+                {% if pools.is_empty() %}
+                <input type="text" name="dataset" required placeholder="tank/data">
+                <small>Enter the dataset path (e.g., tank or tank/data)</small>
+                {% else %}
+                <select name="dataset" required>
+                    <option value="">Select a dataset...</option>
+                    {% for pool in pools %}
+                    <option value="{{ pool.name }}">{{ pool.name }} (entire pool)</option>
+                    {% for ds in pool.datasets %}
+                    {% if ds.name != pool.name %}
+                    <option value="{{ ds.name }}">  └ {{ ds.name }}</option>
+                    {% endif %}
+                    {% endfor %}
+                    {% endfor %}
+                </select>
+                {% endif %}
+            </label>
+            
+            <fieldset>
+                <label>
+                    <input type="checkbox" name="recursive" checked>
+                    Recursive (include child datasets)
+                </label>
+            </fieldset>
+            
+            <h4 style="margin-top: 1rem;">Retention (snapshots to keep)</h4>
+            <div class="btn-group" style="margin-bottom: 0.5rem;">
+                <button type="button" class="small outline" onclick="setRetention(48, 30, 8, 12, 2)">Standard</button>
+                <button type="button" class="small outline" onclick="setRetention(24, 7, 4, 12, 0)">Minimal</button>
+                <button type="button" class="small outline" onclick="setRetention(0, 7, 4, 0, 0)">Daily only</button>
+                <button type="button" class="small outline" onclick="setRetention(0, 0, 0, 12, 5)">Monthly only</button>
+            </div>
+            <div class="grid" style="grid-template-columns: repeat(5, 1fr);">
+                <label>
+                    <small>Hourly</small>
+                    <input type="number" name="hourly" id="ret-hourly" value="24" min="0">
+                </label>
+                <label>
+                    <small>Daily</small>
+                    <input type="number" name="daily" id="ret-daily" value="7" min="0">
+                </label>
+                <label>
+                    <small>Weekly</small>
+                    <input type="number" name="weekly" id="ret-weekly" value="4" min="0">
+                </label>
+                <label>
+                    <small>Monthly</small>
+                    <input type="number" name="monthly" id="ret-monthly" value="12" min="0">
+                </label>
+                <label>
+                    <small>Yearly</small>
+                    <input type="number" name="yearly" id="ret-yearly" value="0" min="0">
+                </label>
+            </div>
+            
+            <div id="policy-result"></div>
+            
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('policy-modal').close()">Cancel</button>
+                <button type="submit" id="create-policy-btn">
+                    <span class="htmx-indicator spinner"></span>
+                    Create Policy
+                </button>
+            </footer>
+        </form>
+    </article>
+</dialog>
+
+<!-- Edit Policy Modal -->
+<dialog id="policy-edit-modal">
+    <article style="max-width: 600px;">
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('policy-edit-modal').close()"></button>
+            <h3>✏️ Edit Snapshot Policy</h3>
+        </header>
+        <div id="policy-edit-form">
+            <!-- Form loaded via HTMX -->
+            <p class="text-center text-muted">Loading...</p>
+        </div>
+    </article>
+</dialog>
+
+<script>
+function setRetention(h, d, w, m, y) {
+    document.getElementById('ret-hourly').value = h;
+    document.getElementById('ret-daily').value = d;
+    document.getElementById('ret-weekly').value = w;
+    document.getElementById('ret-monthly').value = m;
+    document.getElementById('ret-yearly').value = y;
+}
+</script>
+
+<!-- Import Modal -->
+<dialog id="import-modal">
+    <article style="max-width: 500px;">
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('import-modal').close()"></button>
+            <h3>📥 Import ZFS Pool</h3>
+        </header>
+        <div id="importable-list">
+            <span class="spinner"></span> Scanning for importable pools...
+        </div>
+        <footer>
+            <button type="button" class="secondary" onclick="document.getElementById('import-modal').close()">Close</button>
+        </footer>
+    </article>
+</dialog>
+
+<!-- Create Pool Modal -->
+<dialog id="create-modal">
+    <article style="max-width: 600px;">
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('create-modal').close()"></button>
+            <h3>Create ZFS Pool</h3>
+        </header>
+        <form hx-post="/api/web/zfs/pools" 
+              hx-target="#zfs-result"
+              hx-disabled-elt="#create-pool-btn">
+            <input type="hidden" name="devices" value="">
+            <div class="grid">
+                <label>
+                    Pool Name
+                    <input type="text" name="name" required placeholder="nas">
+                </label>
+                <label>
+                    RAID Level
+                    <select name="level" required>
+                        <option value="stripe">Stripe (no redundancy)</option>
+                        <option value="mirror">Mirror (RAID 1)</option>
+                        <option value="raidz1">RAIDZ1 (RAID 5)</option>
+                        <option value="raidz2" selected>RAIDZ2 (RAID 6)</option>
+                        <option value="raidz3">RAIDZ3</option>
+                    </select>
+                </label>
+            </div>
+            
+            <label>
+                Select Disks
+                <div id="zfs-disk-selector">
+                    <span class="spinner"></span> Loading available disks...
+                </div>
+            </label>
+            
+            <details open>
+                <summary>Pool Options</summary>
+                <div class="grid">
+                    <label>
+                        Sector Size (ashift)
+                        <select name="ashift">
+                            <option value="9">512 bytes (ashift=9)</option>
+                            <option value="12" selected>4K (ashift=12)</option>
+                            <option value="13">8K (ashift=13)</option>
+                        </select>
+                    </label>
+                    <label>
+                        Compression
+                        <select name="compression">
+                            <option value="">None</option>
+                            <option value="lz4">LZ4 (fast)</option>
+                            <option value="zstd" selected>ZSTD (balanced)</option>
+                            <option value="zstd-7">ZSTD-7 (better)</option>
+                        </select>
+                    </label>
+                </div>
+                <fieldset>
+                    <label><input type="checkbox" name="autoexpand" checked> Auto-expand</label>
+                    <label><input type="checkbox" name="atime_off" checked> Disable atime</label>
+                    <label><input type="checkbox" name="posix_acl" checked> POSIX ACLs</label>
+                    <label><input type="checkbox" name="xattr_sa" checked> xattr in SA</label>
+                </fieldset>
+            </details>
+            
+            <details>
+                <summary>Advanced</summary>
+                <fieldset>
+                    <label><input type="checkbox" name="force"> ⚠️ Force creation</label>
+                </fieldset>
+            </details>
+            
+            <div id="zfs-result"></div>
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('create-modal').close()">Cancel</button>
+                <button type="submit" id="create-pool-btn">
+                    <span class="htmx-indicator spinner"></span>
+                    Create Pool
+                </button>
+            </footer>
+        </form>
+    </article>
+</dialog>
+
+<!-- Properties Modal -->
+<dialog id="properties-modal">
+    <article style="max-width: 700px; max-height: 80vh; overflow-y: auto;">
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('properties-modal').close()"></button>
+            <h3>⚙️ Pool Properties: <span id="props-pool-name"></span></h3>
+        </header>
+        <div id="properties-content">
+            <span class="spinner"></span> Loading properties...
+        </div>
+        <footer>
+            <button type="button" onclick="document.getElementById('properties-modal').close()">Close</button>
+        </footer>
+    </article>
+</dialog>
+
+<!-- Create Dataset Modal -->
+<dialog id="create-dataset-modal">
+    <article style="max-width: 500px;">
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('create-dataset-modal').close()"></button>
+            <h3>📁 Create Dataset</h3>
+        </header>
+        <form hx-post="/api/web/zfs/datasets" 
+              hx-target="#dataset-result"
+              hx-disabled-elt="#create-dataset-btn">
+            <input type="hidden" name="pool" id="dataset-pool">
+            <label>
+                Dataset Name
+                <input type="text" name="name" required placeholder="documents">
+                <small>Will be created as <code id="dataset-preview"></code></small>
+            </label>
+            <label>
+                Quota (optional)
+                <input type="text" name="quota" placeholder="100G">
+            </label>
+            <div id="dataset-result"></div>
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('create-dataset-modal').close()">Cancel</button>
+                <button type="submit" id="create-dataset-btn">Create Dataset</button>
+            </footer>
+        </form>
+    </article>
+</dialog>
+
+<!-- Create Snapshot Modal -->
+<dialog id="snapshot-modal">
+    <article style="max-width: 500px;">
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('snapshot-modal').close()"></button>
+            <h3>📸 Create Snapshot</h3>
+        </header>
+        <form hx-post="/api/web/zfs/snapshots" 
+              hx-target="#snapshot-result"
+              hx-disabled-elt="#create-snapshot-btn">
+            <input type="hidden" name="dataset" id="snapshot-dataset">
+            <label>
+                Snapshot Name
+                <input type="text" name="name" required placeholder="backup-2024-01-01">
+                <small>Will be created as <code id="snapshot-preview"></code></small>
+            </label>
+            <div id="snapshot-result"></div>
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('snapshot-modal').close()">Cancel</button>
+                <button type="submit" id="create-snapshot-btn">Create Snapshot</button>
+            </footer>
+        </form>
+    </article>
+</dialog>
+
+<!-- ZFS Add Device Modal -->
+<dialog id="zfs-add-device-modal">
+    <article>
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('zfs-add-device-modal').close()"></button>
+            <h3>💾 Add Device to <span id="add-device-pool-name"></span></h3>
+        </header>
+        
+        <div style="margin-bottom: 1rem;">
+            <label>Operation Type</label>
+            <select id="zfs-device-op-type" onchange="updateZfsDeviceForm()">
+                <option value="vdev">Add Vdev (new stripe)</option>
+                <option value="attach">Expand Mirror/RAIDZ</option>
+                <option value="spare">Add Hot Spare</option>
+                <option value="cache">Add Cache (L2ARC)</option>
+                <option value="replace">Replace Device</option>
+            </select>
+        </div>
+        
+        <!-- Add Vdev Form -->
+        <form id="zfs-add-vdev-form" 
+              hx-post="" 
+              hx-target="#zfs-add-device-result"
+              hx-swap="innerHTML"
+              style="display: block;">
+            <label>
+                Vdev Type
+                <select name="level">
+                    <option value="stripe">Stripe (no redundancy)</option>
+                    <option value="mirror">Mirror (RAID1)</option>
+                    <option value="raidz1">RAIDZ1 (single parity)</option>
+                    <option value="raidz2">RAIDZ2 (double parity)</option>
+                    <option value="raidz3">RAIDZ3 (triple parity)</option>
+                </select>
+            </label>
+            <label>
+                Select Disks
+                <div id="zfs-vdev-disk-selector" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--pico-muted-border-color); border-radius: 0.25rem; padding: 0.5rem;">
+                    Loading...
+                </div>
+                <input type="hidden" name="devices" id="zfs-vdev-devices">
+                <small>⚠️ Vdev type should match existing vdevs in pool</small>
+            </label>
+            <label>
+                <input type="checkbox" name="force" value="true">
+                Force (use with caution)
+            </label>
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('zfs-add-device-modal').close()">Cancel</button>
+                <button type="submit">Add Vdev</button>
+            </footer>
+        </form>
+        
+        <!-- Add Spare Form -->
+        <form id="zfs-add-spare-form" 
+              hx-post="" 
+              hx-target="#zfs-add-device-result"
+              hx-swap="innerHTML"
+              style="display: none;">
+            <label>
+                Spare Device
+                <select name="device" id="zfs-spare-device" required>
+                    <option value="">Loading...</option>
+                </select>
+                <small>Hot spare will be used automatically if a drive fails</small>
+            </label>
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('zfs-add-device-modal').close()">Cancel</button>
+                <button type="submit">Add Spare</button>
+            </footer>
+        </form>
+        
+        <!-- Add Cache Form -->
+        <form id="zfs-add-cache-form" 
+              hx-post="" 
+              hx-target="#zfs-add-device-result"
+              hx-swap="innerHTML"
+              style="display: none;">
+            <label>
+                Cache Device (SSD recommended)
+                <select name="device" id="zfs-cache-device" required>
+                    <option value="">Loading...</option>
+                </select>
+                <small>L2ARC cache improves read performance</small>
+            </label>
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('zfs-add-device-modal').close()">Cancel</button>
+                <button type="submit">Add Cache</button>
+            </footer>
+        </form>
+        
+        <!-- Attach Device Form -->
+        <form id="zfs-attach-form" 
+              hx-post="" 
+              hx-target="#zfs-add-device-result"
+              hx-swap="innerHTML"
+              style="display: none;">
+            <label>
+                Target (existing device or RAIDZ vdev)
+                <select name="existing_device" id="zfs-attach-existing" required>
+                    <option value="">Loading...</option>
+                </select>
+                <small>RAIDZ: select the vdev. Mirror: select a device in the mirror.</small>
+            </label>
+            <label>
+                New Device to Add
+                <select name="new_device" id="zfs-attach-new" required>
+                    <option value="">Loading...</option>
+                </select>
+            </label>
+            <label>
+                <input type="checkbox" name="force" value="true">
+                Force (use with caution)
+            </label>
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('zfs-add-device-modal').close()">Cancel</button>
+                <button type="submit">Attach Device</button>
+            </footer>
+        </form>
+        
+        <!-- Replace Device Form -->
+        <form id="zfs-replace-form" 
+              hx-post="" 
+              hx-target="#zfs-add-device-result"
+              hx-swap="innerHTML"
+              style="display: none;">
+            <label>
+                Old Device (to replace)
+                <select name="old_device" id="zfs-replace-old" required>
+                    <option value="">Loading...</option>
+                </select>
+                <small>The failing or old device</small>
+            </label>
+            <label>
+                New Device
+                <select name="new_device" id="zfs-replace-new" required>
+                    <option value="">Loading...</option>
+                </select>
+                <small>Must be same size or larger</small>
+            </label>
+            <label>
+                <input type="checkbox" name="force" value="true">
+                Force (use with caution)
+            </label>
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('zfs-add-device-modal').close()">Cancel</button>
+                <button type="submit">Replace Device</button>
+            </footer>
+        </form>
+        
+        <div id="zfs-add-device-result"></div>
+    </article>
+</dialog>
+
+<script>
+function openPropertiesModal(poolName) {
+    document.getElementById('props-pool-name').textContent = poolName;
+    document.getElementById('properties-modal').showModal();
+    htmx.ajax('GET', '/api/web/zfs/pools/' + poolName + '/properties', '#properties-content');
+}
+
+function openCreateDatasetModal(poolName) {
+    document.getElementById('dataset-pool').value = poolName;
+    document.getElementById('dataset-preview').textContent = poolName + '/';
+    document.getElementById('create-dataset-modal').showModal();
+    
+    document.querySelector('#create-dataset-modal input[name="name"]').oninput = function() {
+        document.getElementById('dataset-preview').textContent = poolName + '/' + this.value;
+    };
+}
+
+function openSnapshotModal(datasetName) {
+    document.getElementById('snapshot-dataset').value = datasetName;
+    document.getElementById('snapshot-preview').textContent = datasetName + '@';
+    document.getElementById('snapshot-modal').showModal();
+    
+    document.querySelector('#snapshot-modal input[name="name"]').oninput = function() {
+        document.getElementById('snapshot-preview').textContent = datasetName + '@' + this.value;
+    };
+}
+
+var currentZfsPool = '';
+
+function openZfsAddDeviceModal(poolName) {
+    currentZfsPool = poolName;
+    document.getElementById('add-device-pool-name').textContent = poolName;
+    document.getElementById('zfs-device-op-type').value = 'vdev';
+    document.getElementById('zfs-add-device-result').innerHTML = '';
+    loadZfsDeviceSelectors();
+    updateZfsDeviceForm();
+    document.getElementById('zfs-add-device-modal').showModal();
+}
+
+function loadZfsDeviceSelectors() {
+    // Load available disks for vdev selector (checkboxes)
+    htmx.ajax('GET', '/api/web/storage/available-disks', '#zfs-vdev-disk-selector');
+    
+    // Load available disks for single-select dropdowns
+    fetch('/api/web/storage/available-disks-select')
+        .then(r => r.text())
+        .then(html => {
+            document.getElementById('zfs-spare-device').innerHTML = html;
+            document.getElementById('zfs-cache-device').innerHTML = html;
+            document.getElementById('zfs-attach-new').innerHTML = html;
+            document.getElementById('zfs-replace-new').innerHTML = html;
+        });
+    
+    // Load pool vdevs and devices
+    fetch('/api/web/zfs/pools/' + currentZfsPool + '/vdevs')
+        .then(r => r.text())
+        .then(html => {
+            document.getElementById('zfs-attach-existing').innerHTML = html;
+        });
+    
+    fetch('/api/web/zfs/pools/' + currentZfsPool + '/devices')
+        .then(r => r.text())
+        .then(html => {
+            document.getElementById('zfs-replace-old').innerHTML = html;
+        });
+}
+
+function updateZfsDeviceForm() {
+    var opType = document.getElementById('zfs-device-op-type').value;
+    var forms = {
+        'vdev': 'zfs-add-vdev-form',
+        'spare': 'zfs-add-spare-form',
+        'cache': 'zfs-add-cache-form',
+        'attach': 'zfs-attach-form',
+        'replace': 'zfs-replace-form'
+    };
+    var endpoints = {
+        'vdev': '/api/web/zfs/pools/' + currentZfsPool + '/add-vdev',
+        'spare': '/api/web/zfs/pools/' + currentZfsPool + '/add-spare',
+        'cache': '/api/web/zfs/pools/' + currentZfsPool + '/add-cache',
+        'attach': '/api/web/zfs/pools/' + currentZfsPool + '/attach',
+        'replace': '/api/web/zfs/pools/' + currentZfsPool + '/replace'
+    };
+    
+    // Hide all forms
+    Object.values(forms).forEach(function(formId) {
+        document.getElementById(formId).style.display = 'none';
+    });
+    
+    // Show selected form and set endpoint
+    var activeForm = document.getElementById(forms[opType]);
+    activeForm.style.display = 'block';
+    activeForm.setAttribute('hx-post', endpoints[opType]);
+    htmx.process(activeForm);
+}
+
+// Update hidden field when checkboxes change in vdev form
+document.addEventListener('change', function(e) {
+    if (e.target.classList.contains('disk-checkbox')) {
+        var form = e.target.closest('form');
+        if (form && form.id === 'zfs-add-vdev-form') {
+            var checkboxes = form.querySelectorAll('.disk-checkbox:checked');
+            var values = Array.from(checkboxes).map(function(cb) { return cb.value; });
+            document.getElementById('zfs-vdev-devices').value = values.join(',');
+        }
+    }
+});
+</script>
+
+{% endblock %}

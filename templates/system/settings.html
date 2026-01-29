@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - NixNAS{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <h2>⚙️ Settings</h2>
+</header>
+
+<div class="card">
+    <h3>🏷️ System Identity</h3>
+    <form hx-post="/api/web/settings/hostname" hx-target="#hostname-result" hx-swap="innerHTML">
+        <label>
+            Hostname
+            <input type="text" name="hostname" value="{{ hostname }}" 
+                   pattern="[a-zA-Z0-9-]+" maxlength="63"
+                   placeholder="nixnas" required>
+            <small>Network name of this NAS (letters, numbers, hyphens only)</small>
+        </label>
+        <button type="submit">💾 Save Hostname</button>
+    </form>
+    <div id="hostname-result"></div>
+</div>
+
+<div class="card">
+    <h3>🔐 Change Admin Password</h3>
+    <form hx-post="/api/web/settings/password" hx-target="#password-result" hx-swap="innerHTML">
+        <label>
+            Current Password
+            <input type="password" name="current_password" required>
+        </label>
+        <label>
+            New Password
+            <input type="password" name="new_password" minlength="8" required>
+            <small>Minimum 8 characters</small>
+        </label>
+        <label>
+            Confirm New Password
+            <input type="password" name="confirm_password" minlength="8" required>
+        </label>
+        <button type="submit">🔑 Change Password</button>
+    </form>
+    <div id="password-result"></div>
+</div>
+
+{% endblock %}

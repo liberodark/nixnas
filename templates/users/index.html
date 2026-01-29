@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}User Management - NixNAS{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <h2>👥 User Management</h2>
+</header>
+
+<div class="card-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+    <a href="/users/settings" class="card-link" style="text-decoration: none;">
+        <div class="card card-hover" style="text-align: center; padding: 2rem; cursor: pointer;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">⚙️</div>
+            <h3 style="margin: 0; color: var(--pico-color);">Settings</h3>
+            <p style="color: var(--pico-muted-color); margin-top: 0.5rem;">Home directories configuration</p>
+        </div>
+    </a>
+    
+    <a href="/users" class="card-link" style="text-decoration: none;">
+        <div class="card card-hover" style="text-align: center; padding: 2rem; cursor: pointer;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">👤</div>
+            <h3 style="margin: 0; color: var(--pico-color);">Users</h3>
+            <p style="color: var(--pico-muted-color); margin-top: 0.5rem;">System user accounts</p>
+        </div>
+    </a>
+    
+    <a href="/users/groups" class="card-link" style="text-decoration: none;">
+        <div class="card card-hover" style="text-align: center; padding: 2rem; cursor: pointer;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">👥</div>
+            <h3 style="margin: 0; color: var(--pico-color);">Groups</h3>
+            <p style="color: var(--pico-muted-color); margin-top: 0.5rem;">System groups</p>
+        </div>
+    </a>
+</div>
+
+{% endblock %}

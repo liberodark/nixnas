@@ -1,0 +1,361 @@
+{% extends "base.html" %}
+
+{% block title %}SMB Shares - NixNAS{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <h2>📁 SMB Shares</h2>
+    <div class="btn-group">
+        <button onclick="document.getElementById('settings-modal').showModal()">
+            ⚙️ Settings
+        </button>
+        <button onclick="document.getElementById('create-modal').showModal()">
+            ➕ New Share
+        </button>
+    </div>
+</header>
+
+<!-- Service Toggle -->
+<div class="card" style="margin-bottom: 1rem;">
+    <div style="display: flex; align-items: center; gap: 1rem;">
+        <label style="margin: 0;">
+            <input type="checkbox" role="switch" 
+                   {% if smb_enabled %}checked{% endif %}
+                   hx-post="/api/web/smb/toggle"
+                   hx-swap="none"
+                   hx-indicator="#smb-toggle-spinner">
+            SMB Service
+            <span id="smb-toggle-spinner" class="htmx-indicator spinner"></span>
+        </label>
+        <span class="badge {% if smb_enabled %}badge-success{% else %}badge-warning{% endif %}">
+            {% if smb_enabled %}Enabled{% else %}Disabled{% endif %}
+        </span>
+    </div>
+</div>
+
+<!-- Users Note -->
+<div class="card" style="margin-bottom: 1rem; padding: 1rem;">
+    <div style="display: flex; align-items: center; justify-content: space-between;">
+        <div>
+            <strong>👥 Users</strong>
+            <p style="margin: 0.25rem 0 0 0; color: var(--pico-muted-color);">
+                Manage users with Samba access in the Users section.
+            </p>
+        </div>
+        <a href="/users" class="btn">Go to Users</a>
+    </div>
+</div>
+
+<!-- Shares Section -->
+<div class="card">
+    <header>
+        <h3 style="margin: 0;">📂 Shares</h3>
+    </header>
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Path</th>
+                <th>Access</th>
+                <th>Permissions</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="shares-list">
+            {% for share in shares %}
+            {% include "shares/smb_row.html" %}
+            {% endfor %}
+        </tbody>
+    </table>
+    
+    {% if shares.is_empty() %}
+    <p style="text-align: center; color: var(--pico-muted-color);">
+        No shares configured yet. Click "New Share" to create one.
+    </p>
+    {% endif %}
+</div>
+
+<!-- Global Settings Modal -->
+<dialog id="settings-modal">
+    <article style="max-width: 700px;">
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('settings-modal').close()"></button>
+            <h3>⚙️ SMB Global Settings</h3>
+        </header>
+        <div id="smb-settings-container" hx-get="/api/web/smb/global-settings" hx-trigger="load">
+            <p style="text-align: center;"><span class="spinner"></span> Loading...</p>
+        </div>
+    </article>
+</dialog>
+
+<!-- Create Share Modal -->
+<dialog id="create-modal">
+    <article style="max-width: 700px; max-height: 90vh; overflow-y: auto;">
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('create-modal').close()"></button>
+            <h3>Create SMB Share</h3>
+        </header>
+        <form hx-post="/api/web/smb/shares" 
+              hx-target="#shares-list" 
+              hx-swap="beforeend"
+              hx-on::after-request="if(event.detail.successful) { document.getElementById('create-modal').close(); this.reset(); showToast('Share created'); }">
+            <div class="grid">
+                <label>
+                    Name
+                    <input type="text" name="name" required placeholder="share-name">
+                </label>
+                <label>
+                    Path
+                    <input type="text" name="path" required placeholder="/mnt/data/share">
+                </label>
+            </div>
+            
+            <label>
+                Comment
+                <input type="text" name="comment" placeholder="Share description">
+            </label>
+            
+            <fieldset>
+                <legend>Access</legend>
+                <div class="grid">
+                    <label>
+                        <input type="checkbox" name="browseable" checked>
+                        Browseable
+                    </label>
+                    <label>
+                        <input type="checkbox" name="read_only">
+                        Read Only
+                    </label>
+                    <label>
+                        <input type="checkbox" name="guest_ok">
+                        Guest Access
+                    </label>
+                    <label>
+                        <input type="checkbox" name="guest_only">
+                        Guest Only
+                    </label>
+                </div>
+            </fieldset>
+            
+            <fieldset>
+                <legend>Users & Groups</legend>
+                <label>
+                    Valid Users
+                    <input type="text" name="valid_users" placeholder="user1 user2 @group1">
+                    <small>Space-separated. @group for groups. Empty = all.</small>
+                </label>
+                <label>
+                    Invalid Users
+                    <input type="text" name="invalid_users" placeholder="guest @blocked">
+                </label>
+                <div class="grid">
+                    <label>
+                        Write List
+                        <input type="text" name="write_list" placeholder="admin @writers">
+                    </label>
+                    <label>
+                        Read List
+                        <input type="text" name="read_list" placeholder="guest @readers">
+                    </label>
+                </div>
+                <div class="grid">
+                    <label>
+                        Force User
+                        <input type="text" name="force_user" placeholder="">
+                    </label>
+                    <label>
+                        Force Group
+                        <input type="text" name="force_group" placeholder="">
+                    </label>
+                </div>
+            </fieldset>
+            
+            <fieldset>
+                <legend>Host Access</legend>
+                <label>
+                    Allowed Hosts
+                    <input type="text" name="hosts_allow" placeholder="192.168.1.0/24 10.0.0.0/8">
+                    <small>Space-separated IPs/subnets. Empty = all.</small>
+                </label>
+                <label>
+                    Denied Hosts
+                    <input type="text" name="hosts_deny" placeholder="192.168.1.100">
+                </label>
+            </fieldset>
+            
+            <fieldset>
+                <legend>Permissions</legend>
+                <div class="grid">
+                    <label>
+                        Create Mask
+                        <input type="text" name="create_mask" value="0664">
+                    </label>
+                    <label>
+                        Directory Mask
+                        <input type="text" name="directory_mask" value="0775">
+                    </label>
+                </div>
+                <div class="grid">
+                    <label>
+                        <input type="checkbox" name="inherit_acls">
+                        Inherit ACLs
+                    </label>
+                    <label>
+                        <input type="checkbox" name="inherit_permissions">
+                        Inherit Permissions
+                    </label>
+                </div>
+            </fieldset>
+            
+            <fieldset>
+                <legend>🗑️ Recycle Bin</legend>
+                <label>
+                    <input type="checkbox" name="recycle_bin">
+                    Enable Recycle Bin
+                </label>
+                <div class="grid">
+                    <label>
+                        Max File Size (bytes)
+                        <input type="number" name="recycle_max_size" value="0" min="0">
+                        <small>0 = no limit</small>
+                    </label>
+                    <label>
+                        Retention (days)
+                        <input type="number" name="recycle_retention_days" value="0" min="0">
+                        <small>0 = no auto-delete</small>
+                    </label>
+                </div>
+            </fieldset>
+            
+            <fieldset>
+                <legend>🔒 Security</legend>
+                <label>
+                    SMB Encryption
+                    <select name="smb_encrypt">
+                        <option value="auto" selected>Auto</option>
+                        <option value="off">Off</option>
+                        <option value="desired">Desired</option>
+                        <option value="required">Required</option>
+                    </select>
+                </label>
+                <label>
+                    <input type="checkbox" name="audit_enabled">
+                    Enable File Audit
+                </label>
+            </fieldset>
+            
+            <details>
+                <summary>Advanced Options</summary>
+                <fieldset>
+                    <legend>Extended Attributes</legend>
+                    <div class="grid">
+                        <label>
+                            <input type="checkbox" name="ea_support" checked>
+                            EA Support
+                        </label>
+                        <label>
+                            <input type="checkbox" name="store_dos_attributes">
+                            Store DOS Attributes
+                        </label>
+                    </div>
+                </fieldset>
+                
+                <fieldset>
+                    <legend>File Visibility</legend>
+                    <div class="grid">
+                        <label>
+                            <input type="checkbox" name="hide_dot_files" checked>
+                            Hide Dot Files
+                        </label>
+                        <label>
+                            <input type="checkbox" name="hide_special_files" checked>
+                            Hide Special Files
+                        </label>
+                    </div>
+                </fieldset>
+                
+                <fieldset>
+                    <legend>Symlinks</legend>
+                    <div class="grid">
+                        <label>
+                            <input type="checkbox" name="follow_symlinks" checked>
+                            Follow Symlinks
+                        </label>
+                        <label>
+                            <input type="checkbox" name="wide_links">
+                            Wide Links (security risk!)
+                        </label>
+                    </div>
+                </fieldset>
+                
+                <fieldset>
+                    <legend>Special Features</legend>
+                    <label>
+                        <input type="checkbox" name="time_machine">
+                        Time Machine Target (macOS)
+                    </label>
+                    <label>
+                        VFS Objects
+                        <input type="text" name="vfs_objects" placeholder="recycle full_audit">
+                    </label>
+                </fieldset>
+                
+                <fieldset>
+                    <legend>Extra Options</legend>
+                    <label>
+                        Raw smb.conf options (one per line: key = value)
+                        <textarea name="extra_options" rows="2" placeholder="socket options = TCP_NODELAY"></textarea>
+                    </label>
+                </fieldset>
+            </details>
+            
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('create-modal').close()">Cancel</button>
+                <button type="submit" id="create-share-btn">
+                    <span class="htmx-indicator spinner"></span>
+                    Create Share
+                </button>
+            </footer>
+        </form>
+    </article>
+</dialog>
+
+<!-- Edit Modal -->
+<dialog id="edit-modal">
+    <article style="max-width: 700px; max-height: 90vh; overflow-y: auto;">
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('edit-modal').close()"></button>
+            <h3>Edit SMB Share</h3>
+        </header>
+        <div id="edit-form-container">
+            <!-- Form loaded via HTMX -->
+        </div>
+    </article>
+</dialog>
+
+<!-- Privileges Modal (Simple - OMV style) -->
+<dialog id="privileges-modal">
+    <article style="max-width: 600px; max-height: 90vh; overflow-y: auto;">
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('privileges-modal').close()"></button>
+            <h3>👥 Privileges</h3>
+        </header>
+        <div id="privileges-container">
+            <!-- Privileges form loaded via HTMX -->
+        </div>
+    </article>
+</dialog>
+
+<!-- ACL Modal (Advanced - POSIX) -->
+<dialog id="acl-modal">
+    <article style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('acl-modal').close()"></button>
+            <h3>🔐 Access Control List (Advanced)</h3>
+        </header>
+        <div id="acl-container">
+            <!-- ACL form loaded via HTMX -->
+        </div>
+    </article>
+</dialog>
+{% endblock %}

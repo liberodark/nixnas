@@ -1,0 +1,424 @@
+{% extends "base.html" %}
+
+{% block title %}Disks - NixNAS{% endblock %}
+
+{% block content %}
+
+<header class="page-header">
+    <h2>💾 Disks</h2>
+    <div class="btn-group">
+        <button hx-post="/api/web/storage/scan" 
+                hx-target="#scan-result"
+                hx-swap="innerHTML"
+                class="outline">
+            <span class="htmx-indicator spinner"></span>
+            🔍 Scan
+        </button>
+        <button onclick="location.reload()" class="outline">
+            🔄 Refresh
+        </button>
+    </div>
+</header>
+<div id="scan-result"></div>
+
+<!-- Disk Overview -->
+<div class="card">
+    <h3>📀 Physical Disks</h3>
+    <table id="disks-table">
+        <thead>
+            <tr>
+                <th class="sortable" style="width: 60px;" onclick="sortDisksTable(0, 'number')">Slot <small>↕</small></th>
+                <th class="sortable" onclick="sortDisksTable(1, 'text')">Device <small>↕</small></th>
+                <th>Model / Serial</th>
+                <th>Size</th>
+                <th>Type</th>
+                <th>Usage</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="disks-tbody">
+            {% for disk in disks %}
+            <tr id="disk-{{ disk.name }}" data-slot="{{ disk.slot }}" data-device="{{ disk.name }}">
+                <td>
+                    {% if disk.slot.is_empty() %}
+                    <button class="small outline secondary"
+                            onclick="openSlotModal('{{ disk.by_id }}', '{{ disk.name }}', '', '')"
+                            title="Set slot number">
+                        ➕
+                    </button>
+                    {% else %}
+                    <button class="small"
+                            onclick="openSlotModal('{{ disk.by_id }}', '{{ disk.name }}', '{{ disk.slot }}', '{{ disk.slot_label }}')"
+                            title="{{ disk.slot_label }}">
+                        <strong>{{ disk.slot }}</strong>
+                    </button>
+                    {% endif %}
+                </td>
+                <td>
+                    <span class="device-badge smart-{{ disk.smart_status }}" title="SMART: {{ disk.smart_status }}">{{ disk.name }}</span>
+                </td>
+                <td>
+                    <strong>{{ disk.model }}</strong><br>
+                    <small style="color: var(--pico-muted-color);">{{ disk.serial }}</small>
+                </td>
+                <td>{{ disk.size_human }}</td>
+                <td>
+                    {% if disk.rotational %}
+                    HDD
+                    {% else %}
+                    SSD
+                    {% endif %}
+                </td>
+                <td>
+                    {% if disk.children.is_empty() %}
+                    <span style="color: var(--pico-muted-color);">Empty</span>
+                    {% else %}
+                        {% for child in disk.children %}
+                            {% if child.fstype == "zfs_member" %}
+                            <span class="badge badge-info">ZFS: {{ child.label }}</span>
+                            {% elif child.mountpoint != "—" %}
+                            <span class="badge badge-success">{{ child.mountpoint }}</span>
+                            {% elif child.fstype != "—" %}
+                            <span class="badge">{{ child.fstype }}</span>
+                            {% endif %}
+                        {% endfor %}
+                    {% endif %}
+                </td>
+                <td>
+                    <div class="btn-group">
+                        {% if disk.children.is_empty() %}
+                        <button class="small outline"
+                                onclick="openFormatModal('{{ disk.path }}', '{{ disk.name }}', '{{ disk.size_human }}')">
+                            📝 Format
+                        </button>
+                        <button class="small outline secondary"
+                                hx-post="/api/web/storage/wipe/{{ disk.name }}"
+                                hx-target="#disk-{{ disk.name }}"
+                                hx-swap="outerHTML"
+                                hx-confirm="⚠️ DANGER: Wipe ALL data on {{ disk.path }}? This cannot be undone!">
+                            🧹 Wipe
+                        </button>
+                        {% else %}
+                        <small style="color: var(--pico-muted-color);">In use</small>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Filesystem Usage -->
+<div class="card">
+    <h3>📊 Filesystem Usage</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Filesystem</th>
+                <th>Mount Point</th>
+                <th>Size</th>
+                <th>Used</th>
+                <th>Available</th>
+                <th>Usage</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for fs in filesystems %}
+            <tr>
+                <td><code>{{ fs.filesystem }}</code></td>
+                <td><code>{{ fs.mountpoint }}</code></td>
+                <td>{{ fs.size_human }}</td>
+                <td>{{ fs.used_human }}</td>
+                <td>{{ fs.available_human }}</td>
+                <td style="min-width: 150px;">
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <progress value="{{ fs.use_percent }}" max="100" style="flex: 1;"></progress>
+                        <span>{{ fs.use_percent }}%</span>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Format Modal -->
+<dialog id="format-modal">
+    <article style="max-width: 500px;">
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('format-modal').close()"></button>
+            <h3>📝 Format Disk</h3>
+        </header>
+        <form hx-post="/api/web/storage/format" 
+              hx-target="#format-result"
+              hx-disabled-elt="#format-btn">
+            <input type="hidden" name="device" id="format-device">
+            
+            <div class="card" style="background: var(--pico-background-color); margin-bottom: 1rem;">
+                <p style="margin: 0;">
+                    <strong>Device:</strong> <code id="format-device-display"></code><br>
+                    <strong>Size:</strong> <span id="format-size-display"></span>
+                </p>
+            </div>
+            
+            <label>
+                Filesystem Type
+                <select name="fstype" required>
+                    <option value="ext4">ext4 (Linux, recommended)</option>
+                    <option value="xfs">XFS (Linux, large files)</option>
+                    <option value="btrfs">Btrfs (Linux, snapshots)</option>
+                    <option value="ntfs">NTFS (Windows compatible)</option>
+                    <option value="exfat">exFAT (Cross-platform)</option>
+                    <option value="vfat">FAT32 (Legacy)</option>
+                </select>
+            </label>
+            
+            <label>
+                Label (optional)
+                <input type="text" name="label" placeholder="DATA" maxlength="16">
+            </label>
+            
+            <details>
+                <summary>Advanced Options</summary>
+                <fieldset>
+                    <label>
+                        <input type="checkbox" name="force">
+                        Force format (ignore warnings)
+                    </label>
+                </fieldset>
+            </details>
+            
+            <div class="card" style="background: #ef444420; border-color: #ef4444; margin-top: 1rem;">
+                <p style="margin: 0; color: #ef4444;">
+                    ⚠️ <strong>Warning:</strong> Formatting will ERASE ALL DATA on this disk!
+                </p>
+            </div>
+            
+            <div id="format-result"></div>
+            
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('format-modal').close()">Cancel</button>
+                <button type="submit" id="format-btn">
+                    <span class="htmx-indicator spinner"></span>
+                    Format Disk
+                </button>
+            </footer>
+        </form>
+    </article>
+</dialog>
+
+<!-- Mount Modal -->
+<dialog id="mount-modal">
+    <article style="max-width: 500px;">
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('mount-modal').close()"></button>
+            <h3>📂 Mount Filesystem</h3>
+        </header>
+        <form hx-post="/api/web/storage/mount" 
+              hx-target="#mount-result"
+              hx-disabled-elt="#mount-btn">
+            <input type="hidden" name="device" id="mount-device">
+            <input type="hidden" name="fstype" id="mount-fstype">
+            
+            <div class="card" style="background: var(--pico-background-color); margin-bottom: 1rem;">
+                <p style="margin: 0;">
+                    <strong>Device:</strong> <code id="mount-device-display"></code><br>
+                    <strong>Filesystem:</strong> <span id="mount-fstype-display"></span>
+                </p>
+            </div>
+            
+            <label>
+                Mount Point
+                <input type="text" name="mountpoint" required placeholder="/mnt/data">
+                <small>Directory will be created if it doesn't exist</small>
+            </label>
+            
+            <div id="mount-result"></div>
+            
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('mount-modal').close()">Cancel</button>
+                <button type="submit" id="mount-btn">
+                    <span class="htmx-indicator spinner"></span>
+                    Mount
+                </button>
+            </footer>
+        </form>
+    </article>
+</dialog>
+
+<!-- Unmount Modal -->
+<dialog id="umount-modal">
+    <article style="max-width: 500px;">
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('umount-modal').close()"></button>
+            <h3>⏏️ Unmount Filesystem</h3>
+        </header>
+        <form hx-post="/api/web/storage/umount" 
+              hx-target="#umount-result"
+              hx-disabled-elt="#umount-btn">
+            <input type="hidden" name="mountpoint" id="umount-mountpoint">
+            
+            <div class="card" style="background: var(--pico-background-color); margin-bottom: 1rem;">
+                <p style="margin: 0;">
+                    <strong>Mount Point:</strong> <code id="umount-mountpoint-display"></code>
+                </p>
+            </div>
+            
+            <fieldset>
+                <label>
+                    <input type="checkbox" name="force">
+                    Force unmount (lazy unmount if busy)
+                </label>
+            </fieldset>
+            
+            <div id="umount-result"></div>
+            
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('umount-modal').close()">Cancel</button>
+                <button type="submit" id="umount-btn">
+                    <span class="htmx-indicator spinner"></span>
+                    Unmount
+                </button>
+            </footer>
+        </form>
+    </article>
+</dialog>
+
+<script>
+function openFormatModal(device, name, size) {
+    document.getElementById('format-device').value = device;
+    document.getElementById('format-device-display').textContent = device;
+    document.getElementById('format-size-display').textContent = size;
+    document.getElementById('format-result').innerHTML = '';
+    document.getElementById('format-modal').showModal();
+}
+
+function openMountModal(device, fstype) {
+    document.getElementById('mount-device').value = device;
+    document.getElementById('mount-fstype').value = fstype;
+    document.getElementById('mount-device-display').textContent = device;
+    document.getElementById('mount-fstype-display').textContent = fstype;
+    document.getElementById('mount-result').innerHTML = '';
+    document.getElementById('mount-modal').showModal();
+}
+
+function openUmountModal(mountpoint) {
+    document.getElementById('umount-mountpoint').value = mountpoint;
+    document.getElementById('umount-mountpoint-display').textContent = mountpoint;
+    document.getElementById('umount-result').innerHTML = '';
+    document.getElementById('umount-modal').showModal();
+}
+
+function openSlotModal(diskId, diskName, currentSlot, currentLabel) {
+    document.getElementById('slot-disk-id').value = diskId;
+    document.getElementById('slot-disk-name').textContent = diskName;
+    document.getElementById('slot-number').value = currentSlot;
+    document.getElementById('slot-label').value = currentLabel;
+    document.getElementById('slot-result').innerHTML = '';
+    document.getElementById('slot-modal').showModal();
+}
+
+function removeSlot() {
+    var diskId = document.getElementById('slot-disk-id').value;
+    
+    fetch('/api/web/storage/disk-slot/remove', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: 'disk_id=' + encodeURIComponent(diskId)
+    })
+    .then(response => response.text())
+    .then(html => {
+        document.getElementById('slot-result').innerHTML = html;
+        if (html.includes('✅')) {
+            setTimeout(() => location.reload(), 1000);
+        }
+    })
+    .catch(err => {
+        document.getElementById('slot-result').innerHTML = '<article style="background: #ef444420;">❌ Error: ' + err + '</article>';
+    });
+}
+
+// Table sorting
+var disksSortDir = {};
+function sortDisksTable(colIndex, type) {
+    var tbody = document.getElementById('disks-tbody');
+    var rows = Array.from(tbody.querySelectorAll('tr'));
+    
+    // Toggle direction
+    disksSortDir[colIndex] = !disksSortDir[colIndex];
+    var asc = disksSortDir[colIndex];
+    
+    // Extract number from slot string (handles "1", "Bay 1", "HDD 1", etc.)
+    function extractSlotNumber(str) {
+        if (!str || str === '') return 9999;
+        var match = str.match(/(\d+)/);
+        return match ? parseInt(match[1]) : 9999;
+    }
+    
+    rows.sort(function(a, b) {
+        var aVal, bVal;
+        
+        if (colIndex === 0) {
+            // Slot - extract number from any format
+            var aNum = extractSlotNumber(a.dataset.slot);
+            var bNum = extractSlotNumber(b.dataset.slot);
+            return asc ? aNum - bNum : bNum - aNum;
+        } else if (colIndex === 1) {
+            // Device - use data attribute
+            aVal = a.dataset.device || '';
+            bVal = b.dataset.device || '';
+            return asc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+        }
+        return 0;
+    });
+    
+    rows.forEach(function(row) {
+        tbody.appendChild(row);
+    });
+}
+</script>
+
+<!-- Disk Slot Modal -->
+<dialog id="slot-modal">
+    <article>
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('slot-modal').close()"></button>
+            <h3>📍 Set Disk Slot</h3>
+        </header>
+        <form hx-post="/api/web/storage/disk-slot"
+              hx-target="#slot-result"
+              hx-swap="innerHTML"
+              hx-on::after-request="if(event.detail.successful && event.detail.xhr.status === 200) setTimeout(() => location.reload(), 500)">
+            <input type="hidden" name="disk_id" id="slot-disk-id">
+            
+            <p>Disk: <strong><code id="slot-disk-name"></code></strong></p>
+            
+            <label>
+                Slot Number
+                <input type="text" name="slot" id="slot-number" placeholder="e.g., 1, A1, Bay 1" required>
+                <small>Physical position in your server/enclosure</small>
+            </label>
+            
+            <label>
+                Label (optional)
+                <input type="text" name="label" id="slot-label" placeholder="e.g., Top left, Backplane 1">
+                <small>Additional description to help identify the disk</small>
+            </label>
+            
+            <div id="slot-result"></div>
+            
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('slot-modal').close()">Cancel</button>
+                <button type="button" class="outline secondary" id="slot-remove-btn"
+                        onclick="removeSlot()">
+                    🗑️ Remove
+                </button>
+                <button type="submit">💾 Save</button>
+            </footer>
+        </form>
+    </article>
+</dialog>
+{% endblock %}

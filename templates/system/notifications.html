@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}Notifications - NixNAS{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <h2>📧 Email Notifications</h2>
+</header>
+
+<div class="card">
+    <h3>SMTP Settings</h3>
+    <form hx-post="/api/web/notifications/smtp" hx-target="#smtp-result" hx-swap="innerHTML">
+        <div class="form-group">
+            <label>
+                <input type="checkbox" name="enabled" {% if config.enabled %}checked{% endif %}>
+                Enable email notifications
+            </label>
+        </div>
+        
+        <div class="form-row">
+            <div class="form-group">
+                <label for="server">SMTP Server *</label>
+                <input type="text" id="server" name="server" value="{{ config.smtp.server }}" 
+                       placeholder="smtp.example.com" required>
+                <small>Outgoing mail server address</small>
+            </div>
+            
+            <div class="form-group">
+                <label for="port">SMTP Port *</label>
+                <input type="number" id="port" name="port" value="{{ config.smtp.port }}" 
+                       min="1" max="65535" required>
+                <small>Usually 587 (STARTTLS), 465 (SSL), or 25</small>
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label for="encryption">Encryption</label>
+            <select id="encryption" name="encryption">
+                <option value="starttls" {% if config.smtp.encryption.as_str() == "starttls" %}selected{% endif %}>STARTTLS (recommended)</option>
+                <option value="ssl" {% if config.smtp.encryption.as_str() == "ssl" %}selected{% endif %}>SSL/TLS</option>
+                <option value="none" {% if config.smtp.encryption.as_str() == "none" %}selected{% endif %}>None (not recommended)</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="sender">Sender Address *</label>
+            <input type="email" id="sender" name="sender" value="{{ config.smtp.sender }}" 
+                   placeholder="nas@example.com" required>
+            <small>The "From" address for notification emails</small>
+        </div>
+        
+        <hr>
+        
+        <div class="form-group">
+            <label>
+                <input type="checkbox" name="auth_required" id="auth_required" 
+                       {% if config.smtp.auth_required %}checked{% endif %}
+                       onchange="document.getElementById('auth-fields').style.display = this.checked ? 'block' : 'none'">
+                Authentication required
+            </label>
+        </div>
+        
+        <div id="auth-fields" style="{% if !config.smtp.auth_required %}display: none;{% endif %}">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" value="{{ config.smtp.username }}" 
+                       placeholder="user@example.com">
+            </div>
+            
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" value="{{ config.smtp.password }}" 
+                       placeholder="••••••••">
+            </div>
+        </div>
+        
+        <hr>
+        <h4>Recipients</h4>
+        
+        <div class="form-group">
+            <label for="recipient">Primary Email *</label>
+            <input type="email" id="recipient" name="recipient" value="{{ config.smtp.recipient }}" 
+                   placeholder="admin@example.com" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="recipient_secondary">Secondary Email (optional)</label>
+            <input type="email" id="recipient_secondary" name="recipient_secondary" 
+                   value="{% match config.smtp.recipient_secondary %}{% when Some with (email) %}{{ email }}{% when None %}{% endmatch %}"
+                   placeholder="backup@example.com">
+        </div>
+        
+        <div class="btn-group">
+            <button type="submit">💾 Save SMTP Settings</button>
+            <button type="button" class="outline" 
+                    hx-post="/api/web/notifications/test" 
+                    hx-target="#smtp-result">
+                📨 Send Test Email
+            </button>
+        </div>
+    </form>
+    <div id="smtp-result" style="margin-top: 1rem;"></div>
+</div>
+
+<div class="card">
+    <h3>Notification Events</h3>
+    <p>Select which events should trigger email notifications:</p>
+    
+    <form hx-post="/api/web/notifications/events" hx-target="#events-result" hx-swap="innerHTML">
+        <div class="events-grid">
+            <div class="event-category">
+                <h4>💾 Storage</h4>
+                <label><input type="checkbox" name="disk_space_warning" {% if config.events.disk_space_warning %}checked{% endif %}> Disk space warning (>80%)</label>
+                <label><input type="checkbox" name="disk_space_critical" {% if config.events.disk_space_critical %}checked{% endif %}> Disk space critical (>95%)</label>
+                <label><input type="checkbox" name="smart_errors" {% if config.events.smart_errors %}checked{% endif %}> S.M.A.R.T. errors</label>
+            </div>
+            
+            <div class="event-category">
+                <h4>🗄️ ZFS</h4>
+                <label><input type="checkbox" name="zfs_pool_errors" {% if config.events.zfs_pool_errors %}checked{% endif %}> Pool errors (degraded, faulted)</label>
+                <label><input type="checkbox" name="zfs_scrub_complete" {% if config.events.zfs_scrub_complete %}checked{% endif %}> Scrub completed</label>
+            </div>
+            
+            <div class="event-category">
+                <h4>💿 RAID</h4>
+                <label><input type="checkbox" name="raid_errors" {% if config.events.raid_errors %}checked{% endif %}> Array errors (degraded, failed)</label>
+            </div>
+            
+            <div class="event-category">
+                <h4>🔧 Services</h4>
+                <label><input type="checkbox" name="service_failures" {% if config.events.service_failures %}checked{% endif %}> Service failures</label>
+            </div>
+            
+            <div class="event-category">
+                <h4>📊 Monitoring</h4>
+                <label><input type="checkbox" name="high_cpu_usage" {% if config.events.high_cpu_usage %}checked{% endif %}> High CPU usage</label>
+                <label><input type="checkbox" name="high_memory_usage" {% if config.events.high_memory_usage %}checked{% endif %}> High memory usage</label>
+                <label><input type="checkbox" name="high_temperature" {% if config.events.high_temperature %}checked{% endif %}> High temperature</label>
+            </div>
+            
+            <div class="event-category">
+                <h4>⚡ System</h4>
+                <label><input type="checkbox" name="system_startup" {% if config.events.system_startup %}checked{% endif %}> System startup</label>
+                <label><input type="checkbox" name="system_shutdown" {% if config.events.system_shutdown %}checked{% endif %}> System shutdown</label>
+            </div>
+        </div>
+        
+        <button type="submit">💾 Save Event Settings</button>
+    </form>
+    <div id="events-result" style="margin-top: 1rem;"></div>
+</div>
+
+{% endblock %}

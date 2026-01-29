@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}Users - NixNAS{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <h2>👤 Users</h2>
+    <div class="btn-group">
+        <button onclick="document.getElementById('create-user-modal').showModal()">
+            ➕ New User
+        </button>
+    </div>
+</header>
+
+<div class="card">
+    <table>
+        <thead>
+            <tr>
+                <th>Username</th>
+                <th>Description</th>
+                <th>Groups</th>
+                <th>Shell</th>
+                <th>Samba</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="users-list" hx-get="/api/web/users/list" hx-trigger="load">
+            <tr><td colspan="7" style="text-align: center;"><span class="spinner"></span> Loading...</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- Create User Modal -->
+<dialog id="create-user-modal">
+    <article style="max-width: 600px; max-height: 90vh; overflow-y: auto;">
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('create-user-modal').close()"></button>
+            <h3>👤 Create User</h3>
+        </header>
+        <form hx-post="/api/web/users" 
+              hx-target="#users-list" 
+              hx-swap="innerHTML"
+              hx-on::after-request="if(event.detail.successful) { document.getElementById('create-user-modal').close(); this.reset(); showToast('User created'); }">
+            <label>
+                Username *
+                <input type="text" name="username" required placeholder="john">
+                <small>Lowercase letters, numbers, underscore, dash</small>
+            </label>
+            
+            <label>
+                Description
+                <input type="text" name="description" placeholder="John Doe">
+            </label>
+            
+            <label>
+                Email
+                <input type="email" name="email" placeholder="john@example.com">
+            </label>
+            
+            <div class="grid">
+                <label>
+                    Password *
+                    <input type="password" name="password" required minlength="4">
+                </label>
+                <label>
+                    Confirm Password *
+                    <input type="password" name="password_confirm" required minlength="4">
+                </label>
+            </div>
+            
+            <label>
+                Shell
+                <select name="shell">
+                    <option value="/usr/bin/nologin" selected>No Login</option>
+                    <option value="/bin/bash">Bash (/bin/bash)</option>
+                    <option value="/bin/sh">Sh (/bin/sh)</option>
+                    <option value="/bin/zsh">Zsh (/bin/zsh)</option>
+                </select>
+            </label>
+            
+            <div class="grid">
+                <label>
+                    UID
+                    <input type="number" name="uid" placeholder="1000" min="1000" max="60000">
+                    <small>User ID (leave empty for auto)</small>
+                </label>
+                <label>
+                    Groups
+                    <input type="text" name="groups" placeholder="wheel, docker">
+                    <small>Extra groups (comma or space separated)</small>
+                </label>
+            </div>
+            
+            <details>
+                <summary>SSH Keys</summary>
+                <label>
+                    Public SSH Keys (one per line)
+                    <textarea name="ssh_keys" rows="3" placeholder="ssh-ed25519 AAAA... user@host"></textarea>
+                </label>
+            </details>
+            
+            <details>
+                <summary>Advanced</summary>
+                <label>
+                    Home Directory
+                    <input type="text" name="home_dir" placeholder="/home/username (auto)">
+                </label>
+                <label>
+                    <input type="checkbox" name="create_home">
+                    Create Home Directory
+                </label>
+            </details>
+            
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('create-user-modal').close()">Cancel</button>
+                <button type="submit">Create User</button>
+            </footer>
+        </form>
+    </article>
+</dialog>
+
+<!-- Edit User Modal -->
+<dialog id="edit-user-modal">
+    <article style="max-width: 600px; max-height: 90vh; overflow-y: auto;">
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('edit-user-modal').close()"></button>
+            <h3>Edit User</h3>
+        </header>
+        <div id="edit-user-container">
+            <!-- Form loaded via HTMX -->
+        </div>
+    </article>
+</dialog>
+
+<!-- Set Password Modal -->
+<dialog id="set-password-modal">
+    <article>
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('set-password-modal').close()"></button>
+            <h3>🔑 Set Password for <span id="password-user-name"></span></h3>
+        </header>
+        <form id="set-password-form"
+              hx-post=""
+              hx-target="#password-result"
+              hx-swap="innerHTML"
+              hx-on::after-request="if(event.detail.successful) { document.getElementById('set-password-modal').close(); showToast('Password updated'); }">
+            <label>
+                New Password
+                <input type="password" name="password" required minlength="4">
+            </label>
+            <div id="password-result"></div>
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('set-password-modal').close()">Cancel</button>
+                <button type="submit">Set Password</button>
+            </footer>
+        </form>
+    </article>
+</dialog>
+
+<script>
+function openSetUserPasswordModal(userId, username) {
+    document.getElementById('password-user-name').textContent = username;
+    document.getElementById('set-password-form').setAttribute('hx-post', '/api/web/users/' + userId + '/password');
+    htmx.process(document.getElementById('set-password-form'));
+    document.getElementById('set-password-modal').showModal();
+}
+</script>
+{% endblock %}

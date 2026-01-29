@@ -1,0 +1,56 @@
+<tr id="share-{{ share.id }}">
+    <td><strong>{{ share.name }}</strong></td>
+    <td><code>{{ share.path }}</code></td>
+    <td>
+        {% if share.guest_ok %}
+        <span class="badge badge-warning">Guest</span>
+        {% else %}
+        {% if share.valid_users.is_empty() %}
+        <span class="badge badge-info">All Users</span>
+        {% else %}
+        <span class="badge badge-success">{{ share.valid_users }}</span>
+        {% endif %}
+        {% endif %}
+    </td>
+    <td>
+        {% if share.read_only %}
+        <span class="badge badge-warning">Read-Only</span>
+        {% else %}
+        <span class="badge badge-success">Read-Write</span>
+        {% endif %}
+    </td>
+    <td>
+        <div class="btn-group">
+            <button class="small outline"
+                    title="Edit share"
+                    hx-get="/api/web/smb/shares/{{ share.id }}/edit"
+                    hx-target="#edit-form-container"
+                    hx-on::after-request="document.getElementById('edit-modal').showModal()">
+                ✏️
+            </button>
+            <button class="small outline"
+                    title="Privileges (simple permissions)"
+                    hx-get="/api/web/smb/shares/{{ share.id }}/privileges"
+                    hx-target="#privileges-container"
+                    hx-on::after-request="document.getElementById('privileges-modal').showModal()">
+                👥
+            </button>
+            <button class="small outline secondary"
+                    title="ACL (advanced POSIX permissions)"
+                    hx-get="/api/web/smb/shares/{{ share.id }}/acl"
+                    hx-target="#acl-container"
+                    hx-on::after-request="document.getElementById('acl-modal').showModal()">
+                🔐
+            </button>
+            <button class="small outline secondary" 
+                    title="Delete share"
+                    name="delete-btn"
+                    hx-delete="/api/web/smb/shares/{{ share.id }}"
+                    hx-target="#share-{{ share.id }}"
+                    hx-swap="outerHTML"
+                    hx-confirm="Delete share '{{ share.name }}'?">
+                🗑️
+            </button>
+        </div>
+    </td>
+</tr>

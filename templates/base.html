@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}NixNAS{% endblock %}</title>
+
+    <!-- Pico CSS -->
+    <link rel="stylesheet" href="/static/pico.min.css">
+
+    <!-- NixNAS CSS -->
+    <link rel="stylesheet" href="/static/style.css">
+
+    <!-- HTMX -->
+    <script src="/static/htmx.min.js"></script>
+</head>
+<body>
+    <aside class="sidebar">
+        <h1>🗄️ NixNAS</h1>
+
+        <!-- Dashboard (direct link) -->
+        <nav class="nav-direct">
+            <a href="/" {% if active_page == "dashboard" %}class="active"{% endif %}>
+                <span class="nav-icon">📊</span> Dashboard
+            </a>
+        </nav>
+
+        <!-- Storage -->
+        <div class="nav-category {% if active_page == "disks" || active_page == "smart" || active_page == "zfs" || active_page == "btrfs" || active_page == "raid" %}open{% endif %}" data-category="storage">
+            <div class="nav-category-header" onclick="toggleCategory(this)">
+                <span class="nav-icon">💾</span>
+                <span class="nav-label">Storage</span>
+                <span class="nav-chevron">▶</span>
+            </div>
+            <ul class="nav-category-items">
+                <li><a href="/storage/disks" {% if active_page == "disks" %}class="active"{% endif %}>Disks</a></li>
+                <li><a href="/storage/smart" {% if active_page == "smart" %}class="active"{% endif %}>S.M.A.R.T.</a></li>
+                <li><a href="/storage/zfs" {% if active_page == "zfs" %}class="active"{% endif %}>ZFS Pools</a></li>
+                <li><a href="/storage/btrfs" {% if active_page == "btrfs" %}class="active"{% endif %}>Btrfs</a></li>
+                <li><a href="/storage/raid" {% if active_page == "raid" %}class="active"{% endif %}>RAID Arrays</a></li>
+            </ul>
+        </div>
+
+        <!-- Services -->
+        <div class="nav-category {% if active_page == "smb" || active_page == "nfs" || active_page == "ssh" || active_page == "rsync" %}open{% endif %}" data-category="services">
+            <div class="nav-category-header" onclick="toggleCategory(this)">
+                <span class="nav-icon">🔌</span>
+                <span class="nav-label">Services</span>
+                <span class="nav-chevron">▶</span>
+            </div>
+            <ul class="nav-category-items">
+                <li><a href="/services/smb" {% if active_page == "smb" %}class="active"{% endif %}>SMB/CIFS</a></li>
+                <li><a href="/services/nfs" {% if active_page == "nfs" %}class="active"{% endif %}>NFS</a></li>
+                <li><a href="/services/ssh" {% if active_page == "ssh" %}class="active"{% endif %}>SSH</a></li>
+                <li><a href="/services/rsync" {% if active_page == "rsync" %}class="active"{% endif %}>Rsync</a></li>
+            </ul>
+        </div>
+
+        <!-- Users -->
+        <div class="nav-category {% if active_page == "users" || active_page == "users-settings" || active_page == "groups" %}open{% endif %}" data-category="users">
+            <div class="nav-category-header" onclick="toggleCategory(this)">
+                <span class="nav-icon">👥</span>
+                <span class="nav-label">Users</span>
+                <span class="nav-chevron">▶</span>
+            </div>
+            <ul class="nav-category-items">
+                <li><a href="/users/settings" {% if active_page == "users-settings" %}class="active"{% endif %}>Settings</a></li>
+                <li><a href="/users" {% if active_page == "users" %}class="active"{% endif %}>Users</a></li>
+                <li><a href="/users/groups" {% if active_page == "groups" %}class="active"{% endif %}>Groups</a></li>
+            </ul>
+        </div>
+
+        <!-- System -->
+        <div class="nav-category {% if active_page == "system" || active_page == "settings" || active_page == "notifications" %}open{% endif %}" data-category="system">
+            <div class="nav-category-header" onclick="toggleCategory(this)">
+                <span class="nav-icon">⚙️</span>
+                <span class="nav-label">System</span>
+                <span class="nav-chevron">▶</span>
+            </div>
+            <ul class="nav-category-items">
+                <li><a href="/system" {% if active_page == "system" %}class="active"{% endif %}>Configuration</a></li>
+                <li><a href="/system/notifications" {% if active_page == "notifications" %}class="active"{% endif %}>📧 Notifications</a></li>
+                <li><a href="/settings" {% if active_page == "settings" %}class="active"{% endif %}>Settings</a></li>
+            </ul>
+        </div>
+
+        <div class="sidebar-footer">
+            <a href="/logout" class="logout-btn">🚪 Logout</a>
+        </div>
+    </aside>
+
+    <main>
+        <!-- Pending changes banner (polls every 30s) -->
+        <div id="pending-banner"
+             hx-get="/api/web/system/pending"
+             hx-trigger="load, every 30s"
+             hx-swap="outerHTML"></div>
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <div id="toast-container"></div>
+
+    <script>
+        // Sidebar category toggle (accordion - only one open at a time)
+        function toggleCategory(header) {
+            const category = header.parentElement;
+            const wasOpen = category.classList.contains('open');
+
+            // Close all categories first
+            document.querySelectorAll('.nav-category.open').forEach(function(cat) {
+                cat.classList.remove('open');
+            });
+
+            // If it wasn't open, open it
+            if (!wasOpen) {
+                category.classList.add('open');
+            }
+
+            // Save state to localStorage (only the one open category)
+            const categoryName = category.dataset.category;
+            if (!wasOpen) {
+                localStorage.setItem('nixnas-open-category', categoryName);
+            } else {
+                localStorage.removeItem('nixnas-open-category');
+            }
+        }
+
+        // Restore category state on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            const openCategory = localStorage.getItem('nixnas-open-category');
+            if (openCategory) {
+                const category = document.querySelector(`.nav-category[data-category="${openCategory}"]`);
+                if (category) {
+                    category.classList.add('open');
+                }
+            }
+        });
+
+        // Toast helper
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 4000);
+        }
+
+        // Refresh pending status
+        function refreshPendingStatus() {
+            htmx.ajax('GET', '/api/web/system/pending', {target: '#pending-banner', swap: 'outerHTML'});
+        }
+
+        // HTMX event handlers
+        document.body.addEventListener('htmx:afterRequest', function(evt) {
+            if (evt.detail.successful) {
+                const trigger = evt.detail.requestConfig.headers['HX-Trigger-Name'];
+                if (trigger === 'delete-btn') {
+                    showToast('Deleted successfully');
+                }
+
+                // Refresh pending status after POST/PUT/DELETE operations
+                const method = evt.detail.requestConfig.verb;
+                if (method === 'post' || method === 'put' || method === 'delete') {
+                    refreshPendingStatus();
+                }
+            }
+        });
+
+        document.body.addEventListener('htmx:responseError', function(evt) {
+            showToast('An error occurred', 'error');
+        });
+
+        // Show toast after build operations
+        document.body.addEventListener('htmx:afterSwap', function(evt) {
+            if (evt.detail.target.id === 'build-output') {
+                const output = evt.detail.target.querySelector('article');
+                if (output) {
+                    if (output.style.borderColor === 'rgb(34, 197, 94)') {
+                        showToast('Operation completed successfully');
+                        // Refresh pending status after successful apply
+                        refreshPendingStatus();
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

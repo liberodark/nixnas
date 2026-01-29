@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}NFS Exports - NixNAS{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <h2>📂 NFS Exports</h2>
+    <div class="btn-group">
+        <button onclick="document.getElementById('nfs-settings-modal').showModal()">
+            ⚙️ Settings
+        </button>
+        <button onclick="document.getElementById('create-modal').showModal()">
+            ➕ New Export
+        </button>
+    </div>
+</header>
+
+<div class="card">
+    <div class="btn-group" style="margin-bottom: 1rem;">
+        <label>
+            <input type="checkbox" role="switch" 
+                   {% if nfs_enabled %}checked{% endif %}
+                   hx-post="/api/web/nfs/toggle"
+                   hx-swap="none"
+                   hx-indicator="#nfs-toggle-spinner">
+            NFS Service Enabled
+            <span id="nfs-toggle-spinner" class="htmx-indicator spinner"></span>
+        </label>
+    </div>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Path</th>
+                <th>Clients</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="exports-list">
+            {% for export in exports %}
+            {% include "shares/nfs_row.html" %}
+            {% endfor %}
+        </tbody>
+    </table>
+    
+    {% if exports.is_empty() %}
+    <p style="text-align: center; color: var(--pico-muted-color);">
+        No exports configured yet. Click "New Export" to create one.
+    </p>
+    {% endif %}
+</div>
+
+<!-- NFS Settings Modal -->
+<dialog id="nfs-settings-modal">
+    <article>
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('nfs-settings-modal').close()"></button>
+            <h3>⚙️ NFS Settings</h3>
+        </header>
+        <div id="nfs-settings-container" hx-get="/api/web/nfs/settings" hx-trigger="load">
+            <p style="text-align: center;"><span class="spinner"></span> Loading...</p>
+        </div>
+    </article>
+</dialog>
+
+<!-- Create Modal -->
+<dialog id="create-modal">
+    <article>
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('create-modal').close()"></button>
+            <h3>Create NFS Export</h3>
+        </header>
+        <form hx-post="/api/web/nfs/exports" 
+              hx-target="#exports-list" 
+              hx-swap="beforeend"
+              hx-on::after-request="if(event.detail.successful) { document.getElementById('create-modal').close(); this.reset(); showToast('Export created'); }">
+            <label>
+                Path
+                <input type="text" name="path" required placeholder="/mnt/data/export">
+            </label>
+            <label>
+                Client Host
+                <input type="text" name="client_host" required placeholder="192.168.0.0/24 or *">
+                <small>Use * for all clients, or specify IP/subnet</small>
+            </label>
+            <fieldset>
+                <legend>Permissions</legend>
+                <label>
+                    Permission
+                    <select name="permission">
+                        <option value="rw">Read/Write</option>
+                        <option value="ro">Read Only</option>
+                    </select>
+                </label>
+            </fieldset>
+            <fieldset>
+                <legend>Options</legend>
+                <div class="grid">
+                    <label>
+                        <input type="checkbox" name="sync" checked>
+                        Sync
+                    </label>
+                    <label>
+                        <input type="checkbox" name="no_root_squash">
+                        No Root Squash
+                    </label>
+                </div>
+                <div class="grid">
+                    <label>
+                        <input type="checkbox" name="subtree_check">
+                        Subtree Check
+                    </label>
+                    <label>
+                        <input type="checkbox" name="insecure">
+                        Insecure (allow ports > 1024)
+                    </label>
+                </div>
+            </fieldset>
+            <label>
+                Extra Options
+                <input type="text" name="extra_options" placeholder="anonuid=1000,anongid=1000">
+                <small>Comma-separated additional options</small>
+            </label>
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('create-modal').close()">Cancel</button>
+                <button type="submit">
+                    <span class="htmx-indicator spinner"></span>
+                    Create Export
+                </button>
+            </footer>
+        </form>
+    </article>
+</dialog>
+{% endblock %}

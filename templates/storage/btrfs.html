@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+
+{% block title %}Btrfs - NixNAS{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <h2>🌲 Btrfs Filesystems</h2>
+    <div class="btn-group">
+        <button onclick="location.reload()" class="outline">
+            🔄 Refresh
+        </button>
+        <button class="primary" onclick="openCreateModal()">
+            ➕ Create Btrfs
+        </button>
+    </div>
+</header>
+
+{% if !btrfs_available %}
+<article style="background: #f59e0b20; border-color: #f59e0b;">
+    <p>⚠️ <strong>Btrfs tools not available.</strong></p>
+    <p>Add to your NixOS configuration:</p>
+    <pre><code>environment.systemPackages = [ pkgs.btrfs-progs ];</code></pre>
+</article>
+{% else %}
+
+{% if filesystems.is_empty() %}
+<article>
+    <p>No Btrfs filesystems found. Click "Create Btrfs" to create one with optional RAID.</p>
+</article>
+{% else %}
+
+<div class="btrfs-list">
+    {% for fs in filesystems %}
+    <div class="card" id="btrfs-{{ fs.uuid }}">
+        <header style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+            <h3 style="margin: 0;">
+                {% if fs.label != "—" %}{{ fs.label }}{% else %}<code>{{ fs.uuid }}</code>{% endif %}
+                <span class="badge badge-info">{{ fs.device_count }} device(s)</span>
+            </h3>
+            <div class="btn-group">
+                <button class="small outline"
+                        onclick="openBtrfsAddDeviceModal('{{ fs.mountpoint }}', '{{ fs.label }}')">
+                    💾 Add Device
+                </button>
+                <button class="small outline"
+                        hx-post="/api/web/btrfs/scrub/{{ fs.mountpoint }}"
+                        hx-target="#btrfs-actions-{{ loop.index }}">
+                    🔍 Scrub
+                </button>
+                <button class="small outline"
+                        hx-post="/api/web/btrfs/balance/{{ fs.mountpoint }}"
+                        hx-target="#btrfs-actions-{{ loop.index }}">
+                    ⚖️ Balance
+                </button>
+            </div>
+        </header>
+        
+        <div id="btrfs-actions-{{ loop.index }}"></div>
+        
+        <div class="compact-stats-grid">
+            <div class="stat-card">
+                <div class="label">Total Size</div>
+                <div class="value">{{ fs.total_size }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Mountpoint</div>
+                <div class="value" style="font-size: 0.85rem;"><code>{{ fs.mountpoint }}</code></div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Data Profile</div>
+                <div class="value">{{ fs.data_profile }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Devices</div>
+                <div class="value">{{ fs.device_count }}</div>
+            </div>
+        </div>
+        
+        <details>
+            <summary>Devices ({{ fs.devices.len() }})</summary>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Device</th>
+                        <th>Size</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for dev in fs.devices %}
+                    <tr>
+                        <td>{{ dev.devid }}</td>
+                        <td><code>{{ dev.path }}</code></td>
+                        <td>{{ dev.size_human }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </details>
+        
+        <details>
+            <summary>UUID</summary>
+            <code style="word-break: break-all;">{{ fs.uuid }}</code>
+        </details>
+    </div>
+    {% endfor %}
+</div>
+
+{% endif %}
+{% endif %}
+
+<!-- Create Modal -->
+<dialog id="create-modal">
+    <article style="max-width: 600px;">
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('create-modal').close()"></button>
+            <h3>Create Btrfs Filesystem</h3>
+        </header>
+        <form hx-post="/api/web/btrfs/create" 
+              hx-target="#btrfs-result"
+              hx-disabled-elt="#create-btrfs-btn">
+            <input type="hidden" name="devices" id="btrfs-devices" value="">
+            
+            <label>
+                Label (optional)
+                <input type="text" name="label" placeholder="data">
+            </label>
+            
+            <div class="grid">
+                <label>
+                    Data Profile
+                    <select name="data_profile" required>
+                        <option value="single">Single (no redundancy)</option>
+                        <option value="dup">Dup (duplicate on same disk)</option>
+                        <option value="raid0">RAID 0 (stripe)</option>
+                        <option value="raid1" selected>RAID 1 (mirror)</option>
+                        <option value="raid1c3">RAID 1C3 (3 copies)</option>
+                        <option value="raid1c4">RAID 1C4 (4 copies)</option>
+                        <option value="raid5">RAID 5 (min 3 disks)</option>
+                        <option value="raid6">RAID 6 (min 4 disks)</option>
+                        <option value="raid10">RAID 10 (min 4 disks)</option>
+                    </select>
+                </label>
+                <label>
+                    Metadata Profile
+                    <select name="metadata_profile" required>
+                        <option value="single">Single</option>
+                        <option value="dup" selected>Dup (recommended)</option>
+                        <option value="raid0">RAID 0</option>
+                        <option value="raid1">RAID 1</option>
+                        <option value="raid1c3">RAID 1C3</option>
+                        <option value="raid1c4">RAID 1C4</option>
+                        <option value="raid5">RAID 5</option>
+                        <option value="raid6">RAID 6</option>
+                        <option value="raid10">RAID 10</option>
+                    </select>
+                </label>
+            </div>
+            
+            <label>
+                Select Disks
+                <div id="btrfs-disk-selector">
+                    <span class="spinner"></span> Loading available disks...
+                </div>
+                <small>Select disks based on RAID level requirements</small>
+            </label>
+            
+            <article style="background: #3b82f620; border-color: #3b82f6; margin-top: 1rem;">
+                <p style="margin: 0;"><strong>📋 RAID Level Requirements:</strong></p>
+                <ul style="margin: 0.5rem 0 0 1rem; padding: 0;">
+                    <li><strong>RAID 0:</strong> min 2 disks, no redundancy</li>
+                    <li><strong>RAID 1:</strong> min 2 disks, mirrors data</li>
+                    <li><strong>RAID 1C3:</strong> min 3 disks, 3 copies</li>
+                    <li><strong>RAID 5:</strong> min 3 disks, single parity</li>
+                    <li><strong>RAID 6:</strong> min 4 disks, double parity</li>
+                    <li><strong>RAID 10:</strong> min 4 disks, striped mirrors</li>
+                </ul>
+            </article>
+            
+            <div id="btrfs-result"></div>
+            
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('create-modal').close()">Cancel</button>
+                <button type="submit" id="create-btrfs-btn">
+                    <span class="htmx-indicator spinner"></span>
+                    Create Filesystem
+                </button>
+            </footer>
+        </form>
+    </article>
+</dialog>
+
+<!-- Btrfs Add Device Modal -->
+<dialog id="btrfs-add-device-modal">
+    <article>
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('btrfs-add-device-modal').close()"></button>
+            <h3>💾 Add Device to <span id="btrfs-fs-name"></span></h3>
+        </header>
+        <form hx-post="/api/web/btrfs/add-device" 
+              hx-target="#btrfs-add-result"
+              hx-swap="innerHTML">
+            <input type="hidden" name="mountpoint" id="btrfs-add-mountpoint">
+            <label>
+                Device to Add
+                <select name="device" id="btrfs-add-device-select" required>
+                    <option value="">Loading...</option>
+                </select>
+                <small>Device will be added to the filesystem. Run balance after to redistribute data.</small>
+            </label>
+            <div id="btrfs-add-result"></div>
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('btrfs-add-device-modal').close()">Cancel</button>
+                <button type="submit">Add Device</button>
+            </footer>
+        </form>
+    </article>
+</dialog>
+
+<script>
+function openCreateModal() {
+    document.getElementById('create-modal').showModal();
+    htmx.ajax('GET', '/api/web/storage/available-disks', '#btrfs-disk-selector');
+}
+
+function updateDevicesField(checkbox) {
+    const form = checkbox.closest('form');
+    const hiddenField = form.querySelector('input[name="devices"]');
+    const checkboxes = form.querySelectorAll('.disk-checkbox:checked');
+    const values = Array.from(checkboxes).map(cb => cb.value);
+    hiddenField.value = values.join(',');
+}
+
+function openBtrfsAddDeviceModal(mountpoint, label) {
+    document.getElementById('btrfs-fs-name').textContent = label || mountpoint;
+    document.getElementById('btrfs-add-mountpoint').value = mountpoint;
+    document.getElementById('btrfs-add-result').innerHTML = '';
+    
+    // Load available disks
+    fetch('/api/web/storage/available-disks-select')
+        .then(r => r.text())
+        .then(html => {
+            document.getElementById('btrfs-add-device-select').innerHTML = html;
+        });
+    
+    document.getElementById('btrfs-add-device-modal').showModal();
+}
+</script>
+
+{% endblock %}

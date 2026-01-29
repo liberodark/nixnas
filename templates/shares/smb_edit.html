@@ -1,0 +1,233 @@
+<form hx-put="/api/web/smb/shares/{{ share.id }}" 
+      hx-target="#share-{{ share.id }}"
+      hx-swap="outerHTML"
+      hx-on::after-request="if(event.detail.successful) { document.getElementById('edit-modal').close(); showToast('Share updated'); }"
+      style="max-height: 70vh; overflow-y: auto;">
+    <input type="hidden" name="id" value="{{ share.id }}">
+    
+    <div class="grid">
+        <label>
+            Name
+            <input type="text" name="name" value="{{ share.name }}" required>
+        </label>
+        <label>
+            Path
+            <input type="text" name="path" value="{{ share.path }}" required>
+        </label>
+    </div>
+    
+    <label>
+        Comment
+        <input type="text" name="comment" value="{{ share.comment }}" placeholder="Share description">
+    </label>
+    
+    <fieldset>
+        <legend>Access</legend>
+        <div class="grid">
+            <label>
+                <input type="checkbox" name="browseable" {% if share.browseable %}checked{% endif %}>
+                Browseable
+            </label>
+            <label>
+                <input type="checkbox" name="read_only" {% if share.read_only %}checked{% endif %}>
+                Read Only
+            </label>
+            <label>
+                <input type="checkbox" name="guest_ok" {% if share.guest_ok %}checked{% endif %}>
+                Guest Access
+            </label>
+            <label>
+                <input type="checkbox" name="guest_only" {% if share.guest_only %}checked{% endif %}>
+                Guest Only
+            </label>
+        </div>
+    </fieldset>
+    
+    <fieldset>
+        <legend>Users & Groups</legend>
+        <label>
+            Valid Users
+            <input type="text" name="valid_users" value="{{ share.valid_users }}" placeholder="user1 user2 @group1">
+        </label>
+        <label>
+            Invalid Users
+            <input type="text" name="invalid_users" value="{{ share.invalid_users }}" placeholder="guest @blocked">
+        </label>
+        <div class="grid">
+            <label>
+                Write List
+                <input type="text" name="write_list" value="{{ share.write_list }}" placeholder="admin @writers">
+            </label>
+            <label>
+                Read List
+                <input type="text" name="read_list" value="{{ share.read_list }}" placeholder="guest @readers">
+            </label>
+        </div>
+        <div class="grid">
+            <label>
+                Force User
+                <input type="text" name="force_user" value="{{ share.force_user }}" placeholder="">
+            </label>
+            <label>
+                Force Group
+                <input type="text" name="force_group" value="{{ share.force_group }}" placeholder="">
+            </label>
+        </div>
+    </fieldset>
+    
+    <fieldset>
+        <legend>Host Access</legend>
+        <label>
+            Allowed Hosts
+            <input type="text" name="hosts_allow" value="{{ share.hosts_allow }}" placeholder="192.168.1.0/24 10.0.0.0/8">
+            <small>Space-separated IPs/subnets. Empty = all.</small>
+        </label>
+        <label>
+            Denied Hosts
+            <input type="text" name="hosts_deny" value="{{ share.hosts_deny }}" placeholder="192.168.1.100">
+            <small>Space-separated IPs/hostnames</small>
+        </label>
+    </fieldset>
+    
+    <fieldset>
+        <legend>Permissions</legend>
+        <div class="grid">
+            <label>
+                Create Mask
+                <input type="text" name="create_mask" value="{{ share.create_mask }}">
+            </label>
+            <label>
+                Directory Mask
+                <input type="text" name="directory_mask" value="{{ share.directory_mask }}">
+            </label>
+        </div>
+        <div class="grid">
+            <label>
+                Force Create Mode
+                <input type="text" name="force_create_mode" value="{{ share.force_create_mode }}" placeholder="">
+            </label>
+            <label>
+                Force Directory Mode
+                <input type="text" name="force_directory_mode" value="{{ share.force_directory_mode }}" placeholder="">
+            </label>
+        </div>
+        <div class="grid">
+            <label>
+                <input type="checkbox" name="inherit_acls" {% if share.inherit_acls %}checked{% endif %}>
+                Inherit ACLs
+            </label>
+            <label>
+                <input type="checkbox" name="inherit_permissions" {% if share.inherit_permissions %}checked{% endif %}>
+                Inherit Permissions
+            </label>
+        </div>
+    </fieldset>
+    
+    <fieldset>
+        <legend>🗑️ Recycle Bin</legend>
+        <label>
+            <input type="checkbox" name="recycle_bin" {% if share.recycle_bin %}checked{% endif %}>
+            Enable Recycle Bin
+        </label>
+        <div class="grid">
+            <label>
+                Max File Size (bytes)
+                <input type="number" name="recycle_max_size" value="{{ share.recycle_max_size }}" min="0">
+                <small>0 = no limit</small>
+            </label>
+            <label>
+                Retention (days)
+                <input type="number" name="recycle_retention_days" value="{{ share.recycle_retention_days }}" min="0">
+                <small>0 = no auto-delete</small>
+            </label>
+        </div>
+    </fieldset>
+    
+    <fieldset>
+        <legend>🔒 Security</legend>
+        <label>
+            SMB Encryption
+            <select name="smb_encrypt">
+                <option value="auto" {% if share.smb_encrypt == "auto" %}selected{% endif %}>Auto</option>
+                <option value="off" {% if share.smb_encrypt == "off" %}selected{% endif %}>Off</option>
+                <option value="desired" {% if share.smb_encrypt == "desired" %}selected{% endif %}>Desired</option>
+                <option value="required" {% if share.smb_encrypt == "required" %}selected{% endif %}>Required</option>
+            </select>
+        </label>
+        <label>
+            <input type="checkbox" name="audit_enabled" {% if share.audit_enabled %}checked{% endif %}>
+            Enable File Audit
+            <small>Log all file operations</small>
+        </label>
+    </fieldset>
+    
+    <details>
+        <summary>Advanced Options</summary>
+        <fieldset>
+            <legend>Extended Attributes</legend>
+            <div class="grid">
+                <label>
+                    <input type="checkbox" name="ea_support" {% if share.ea_support %}checked{% endif %}>
+                    EA Support
+                </label>
+                <label>
+                    <input type="checkbox" name="store_dos_attributes" {% if share.store_dos_attributes %}checked{% endif %}>
+                    Store DOS Attributes
+                </label>
+            </div>
+        </fieldset>
+        
+        <fieldset>
+            <legend>File Visibility</legend>
+            <div class="grid">
+                <label>
+                    <input type="checkbox" name="hide_dot_files" {% if share.hide_dot_files %}checked{% endif %}>
+                    Hide Dot Files
+                </label>
+                <label>
+                    <input type="checkbox" name="hide_special_files" {% if share.hide_special_files %}checked{% endif %}>
+                    Hide Special Files
+                </label>
+            </div>
+        </fieldset>
+        
+        <fieldset>
+            <legend>Symlinks</legend>
+            <div class="grid">
+                <label>
+                    <input type="checkbox" name="follow_symlinks" {% if share.follow_symlinks %}checked{% endif %}>
+                    Follow Symlinks
+                </label>
+                <label>
+                    <input type="checkbox" name="wide_links" {% if share.wide_links %}checked{% endif %}>
+                    Wide Links (security risk!)
+                </label>
+            </div>
+        </fieldset>
+        
+        <fieldset>
+            <legend>Special Features</legend>
+            <label>
+                <input type="checkbox" name="time_machine" {% if share.time_machine %}checked{% endif %}>
+                Time Machine Target (macOS)
+            </label>
+            <label>
+                VFS Objects
+                <input type="text" name="vfs_objects" value="{{ share.vfs_objects }}" placeholder="recycle full_audit">
+            </label>
+        </fieldset>
+        
+        <fieldset>
+            <legend>Extra Options</legend>
+            <label>
+                Raw smb.conf options (one per line: key = value)
+                <textarea name="extra_options" rows="3" placeholder="socket options = TCP_NODELAY&#10;aio read size = 1">{{ share.extra_options }}</textarea>
+            </label>
+        </fieldset>
+    </details>
+    
+    <footer>
+        <button type="button" class="secondary" onclick="document.getElementById('edit-modal').close()">Cancel</button>
+        <button type="submit">Save Changes</button>
+    </footer>
+</form>

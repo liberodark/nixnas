@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+
+{% block title %}RAID Arrays - NixNAS{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <h2>📀 RAID Arrays (mdadm)</h2>
+    <div class="btn-group">
+        <button onclick="document.getElementById('create-modal').showModal(); htmx.ajax('GET', '/api/web/storage/available-disks', '#raid-disk-selector');">
+            ➕ Create Array
+        </button>
+    </div>
+</header>
+
+{% if !mdadm_available %}
+<article class="card" style="background: #eab30820; border-color: #eab308;">
+    <p>⚠️ mdadm is not available on this system.</p>
+</article>
+{% else %}
+
+{% if arrays.is_empty() %}
+<div class="card">
+    <p style="text-align: center; color: var(--pico-muted-color);">
+        No RAID arrays found.
+    </p>
+</div>
+{% else %}
+
+<div id="arrays-container">
+    {% for array in arrays %}
+    <div class="card" id="array-{{ array.id }}">
+        <header style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+            <h3 style="margin: 0;">
+                <code>{{ array.device }}</code>
+                {% if array.state == "clean" %}
+                <span class="badge badge-success">{{ array.state }}</span>
+                {% else %}
+                <span class="badge badge-warning">{{ array.state }}</span>
+                {% endif %}
+            </h3>
+            <div class="btn-group">
+                <button class="small outline"
+                        onclick="openMdadmAddDeviceModal('{{ array.device }}', {{ array.device_count }})">
+                    💾 Add Device
+                </button>
+                <button class="small outline secondary"
+                        hx-delete="/api/web/mdadm/arrays/{{ array.id }}"
+                        hx-target="#array-{{ array.id }}"
+                        hx-swap="outerHTML"
+                        hx-confirm="⚠️ DANGER: Are you sure you want to STOP array '{{ array.device }}'? Make sure it is unmounted first!">
+                    🗑️ Stop
+                </button>
+            </div>
+        </header>
+        
+        <div id="array-actions-{{ array.id }}"></div>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="label">Level</div>
+                <div class="value">{{ array.level }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Devices</div>
+                <div class="value">{{ array.device_count }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Size</div>
+                <div class="value">{{ array.size_human }}</div>
+            </div>
+        </div>
+        
+        <details>
+            <summary>Devices ({{ array.devices.len() }})</summary>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Device</th>
+                        <th>State</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for dev in array.devices %}
+                    <tr>
+                        <td><code>{{ dev.path }}</code></td>
+                        <td>
+                            {% if dev.state == "active" %}
+                            <span class="badge badge-success">{{ dev.state }}</span>
+                            {% else %}
+                            <span class="badge badge-warning">{{ dev.state }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </details>
+    </div>
+    {% endfor %}
+</div>
+
+{% endif %}
+{% endif %}
+
+<!-- Create Array Modal -->
+<dialog id="create-modal">
+    <article>
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('create-modal').close()"></button>
+            <h3>Create RAID Array</h3>
+        </header>
+        <form hx-post="/api/web/mdadm/arrays" 
+              hx-target="#raid-result"
+              hx-disabled-elt="#create-array-btn">
+            <input type="hidden" name="devices" value="">
+            <label>
+                Device Name
+                <input type="text" name="device" required placeholder="/dev/md0">
+            </label>
+            <label>
+                RAID Level
+                <select name="level" required>
+                    <option value="raid0">RAID 0 (Stripe - no redundancy)</option>
+                    <option value="raid1">RAID 1 (Mirror)</option>
+                    <option value="raid5">RAID 5 (min 3 disks)</option>
+                    <option value="raid6">RAID 6 (min 4 disks)</option>
+                    <option value="raid10">RAID 10 (min 4 disks)</option>
+                </select>
+            </label>
+            <label>
+                Select Disks
+                <div id="raid-disk-selector">
+                    <span class="spinner"></span> Loading available disks...
+                </div>
+                <small>Select at least 2 disks for RAID 0/1, 3 for RAID 5, 4 for RAID 6/10</small>
+            </label>
+            <div id="raid-result"></div>
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('create-modal').close()">Cancel</button>
+                <button type="submit" id="create-array-btn">
+                    <span class="htmx-indicator spinner"></span>
+                    Create Array
+                </button>
+            </footer>
+        </form>
+    </article>
+</dialog>
+
+<!-- mdadm Add Device Modal -->
+<dialog id="mdadm-add-device-modal">
+    <article>
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('mdadm-add-device-modal').close()"></button>
+            <h3>💾 Add Device to <span id="mdadm-array-name"></span></h3>
+        </header>
+        
+        <div style="margin-bottom: 1rem;">
+            <label>Operation Type</label>
+            <select id="mdadm-op-type" onchange="updateMdadmForm()">
+                <option value="add">Add Device (spare or grow)</option>
+                <option value="grow">Grow Array (use added devices)</option>
+            </select>
+        </div>
+        
+        <!-- Add Device Form -->
+        <form id="mdadm-add-form" 
+              hx-post="" 
+              hx-target="#mdadm-add-result"
+              hx-swap="innerHTML"
+              style="display: block;">
+            <label>
+                Device to Add
+                <select name="device" id="mdadm-add-device-select" required>
+                    <option value="">Loading...</option>
+                </select>
+                <small>Device will be added as spare or hot-add to array</small>
+            </label>
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('mdadm-add-device-modal').close()">Cancel</button>
+                <button type="submit">Add Device</button>
+            </footer>
+        </form>
+        
+        <!-- Grow Form -->
+        <form id="mdadm-grow-form" 
+              hx-post="" 
+              hx-target="#mdadm-add-result"
+              hx-swap="innerHTML"
+              style="display: none;">
+            <label>
+                New Device Count
+                <input type="number" name="raid_devices" required placeholder="4" id="mdadm-new-count">
+                <small>Current devices: <span id="mdadm-current-count">0</span>. Growing takes time and cannot be interrupted!</small>
+            </label>
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('mdadm-add-device-modal').close()">Cancel</button>
+                <button type="submit">Grow Array</button>
+            </footer>
+        </form>
+        
+        <div id="mdadm-add-result"></div>
+    </article>
+</dialog>
+
+<script>
+var currentMdadmArray = '';
+var currentMdadmCount = 0;
+
+function openMdadmAddDeviceModal(arrayName, deviceCount) {
+    currentMdadmArray = arrayName;
+    currentMdadmCount = deviceCount;
+    document.getElementById('mdadm-array-name').textContent = arrayName;
+    document.getElementById('mdadm-current-count').textContent = deviceCount;
+    document.getElementById('mdadm-new-count').value = deviceCount + 1;
+    document.getElementById('mdadm-op-type').value = 'add';
+    document.getElementById('mdadm-add-result').innerHTML = '';
+    
+    // Load available disks
+    fetch('/api/web/storage/available-disks-select')
+        .then(r => r.text())
+        .then(html => {
+            document.getElementById('mdadm-add-device-select').innerHTML = html;
+        });
+    
+    updateMdadmForm();
+    document.getElementById('mdadm-add-device-modal').showModal();
+}
+
+function updateMdadmForm() {
+    var opType = document.getElementById('mdadm-op-type').value;
+    var arrayId = currentMdadmArray.replace('/dev/', '');
+    
+    var addForm = document.getElementById('mdadm-add-form');
+    var growForm = document.getElementById('mdadm-grow-form');
+    
+    if (opType === 'add') {
+        addForm.style.display = 'block';
+        growForm.style.display = 'none';
+        addForm.setAttribute('hx-post', '/api/web/mdadm/arrays/' + arrayId + '/add-device');
+        htmx.process(addForm);
+    } else {
+        addForm.style.display = 'none';
+        growForm.style.display = 'block';
+        growForm.setAttribute('hx-post', '/api/web/mdadm/arrays/' + arrayId + '/grow');
+        htmx.process(growForm);
+    }
+}
+</script>
+{% endblock %}

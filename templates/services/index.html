@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Services - NixNAS{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <h2>🔌 Services</h2>
+</header>
+
+<div class="card-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+    <a href="/services/smb" class="card-link" style="text-decoration: none;">
+        <div class="card card-hover" style="text-align: center; padding: 2rem; cursor: pointer;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">📁</div>
+            <h3 style="margin: 0; color: var(--pico-color);">SMB/CIFS</h3>
+            <p style="color: var(--pico-muted-color); margin-top: 0.5rem;">Windows file sharing</p>
+        </div>
+    </a>
+    
+    <a href="/services/nfs" class="card-link" style="text-decoration: none;">
+        <div class="card card-hover" style="text-align: center; padding: 2rem; cursor: pointer;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">📂</div>
+            <h3 style="margin: 0; color: var(--pico-color);">NFS</h3>
+            <p style="color: var(--pico-muted-color); margin-top: 0.5rem;">Network file system</p>
+        </div>
+    </a>
+    
+    <a href="/services/rsync" class="card-link" style="text-decoration: none;">
+        <div class="card card-hover" style="text-align: center; padding: 2rem; cursor: pointer;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">🔄</div>
+            <h3 style="margin: 0; color: var(--pico-color);">Rsync</h3>
+            <p style="color: var(--pico-muted-color); margin-top: 0.5rem;">Remote sync service</p>
+        </div>
+    </a>
+    
+    <a href="/services/ssh" class="card-link" style="text-decoration: none;">
+        <div class="card card-hover" style="text-align: center; padding: 2rem; cursor: pointer;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">🔐</div>
+            <h3 style="margin: 0; color: var(--pico-color);">SSH</h3>
+            <p style="color: var(--pico-muted-color); margin-top: 0.5rem;">Secure shell access</p>
+        </div>
+    </a>
+</div>
+
+{% endblock %}

@@ -1,0 +1,165 @@
+name: Rust
+
+on:
+  push:
+    branches: [ "*" ]
+    tags: [ "v*" ]
+  pull_request:
+    branches: [ "*" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Install Rust
+        run: |
+          rustup update 1.91.1
+          rustup default 1.91.1
+          rustup component add rustfmt clippy
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Check Rust and Clippy versions
+        run: |
+          rustc --version
+          cargo clippy --version
+          cargo --version
+      - name: Run clippy
+        run: cargo clippy -- -D warnings
+
+  test:
+    name: Test
+    needs: check
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust: [stable, beta]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-${{ matrix.rust }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Install Rust
+        run: |
+          rustup update ${{ matrix.rust }}
+          rustup default ${{ matrix.rust }}
+      - name: Build
+        run: cargo build --verbose
+      - name: Run tests
+        run: cargo test --verbose
+
+  build:
+    name: Build Linux
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libudev-dev
+      - name: Install Rust
+        run: |
+          rustup update stable
+          rustup default stable
+      - name: Build release
+        run: cargo build --release --verbose
+      - name: Set version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+      - name: Create tarball
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          cd target/release
+          tar -czvf nixnas-daemon-${{ env.VERSION }}-linux-x86_64.tar.gz nixnas-daemon
+          cd ../..
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: nixnas-daemon-linux
+          path: target/release/nixnas-daemon
+      - name: Upload tarball artifact
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v6
+        with:
+          name: nixnas-daemon-linux-tarball
+          path: target/release/nixnas-daemon-${{ env.VERSION }}-linux-x86_64.tar.gz
+
+  release:
+    name: Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - name: Get version
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+      - name: Download Linux binary
+        uses: actions/download-artifact@v7
+        with:
+          name: nixnas-daemon-linux
+          path: ./
+      - name: Download Linux tarball
+        uses: actions/download-artifact@v7
+        with:
+          name: nixnas-daemon-linux-tarball
+          path: ./
+      - name: Make executable
+        run: chmod +x nixnas-daemon
+      - name: Rename binary
+        run: mv nixnas-daemon nixnas-daemon-${{ env.VERSION }}-linux-x86_64
+      - name: Extract changelog
+        id: changelog
+        run: |
+          if [ -f CHANGELOG.md ]; then
+            # Extract content between the latest version header and the next version header
+            CHANGELOG=$(awk "/^## \[${{ env.VERSION }}\]/ {flag=1;next} /^## \[/ {flag=0} flag" CHANGELOG.md | tr -d '\r')
+            if [ -z "$CHANGELOG" ]; then
+              CHANGELOG="Release version ${{ env.VERSION }}"
+            fi
+            echo "CHANGELOG<<EOF" >> $GITHUB_ENV
+            echo "$CHANGELOG" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
+          else
+            echo "CHANGELOG=Release version ${{ env.VERSION }}" >> $GITHUB_ENV
+          fi
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            nixnas-daemon-${{ env.VERSION }}-linux-x86_64
+            nixnas-daemon-${{ env.VERSION }}-linux-x86_64.tar.gz
+          body: ${{ env.CHANGELOG }}
+          draft: false
+          prerelease: false

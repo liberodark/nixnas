@@ -1,0 +1,15 @@
+<article style="{% if success %}background: #22c55e20; border-color: #22c55e;{% else %}background: #ef444420; border-color: #ef4444;{% endif %}">
+    <header>
+        {% if success %}
+        <strong>✅ {{ title }}</strong>
+        {% else %}
+        <strong>❌ {{ title }}</strong>
+        {% endif %}
+    </header>
+    {% if output != "" %}
+    <pre style="font-size: 0.875rem; overflow-x: auto;"><code>{{ output }}</code></pre>
+    {% endif %}
+    {% if error != "" %}
+    <pre style="font-size: 0.875rem; overflow-x: auto; color: #ef4444;"><code>{{ error }}</code></pre>
+    {% endif %}
+</article>

@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}Groups - NixNAS{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <h2>👥 Groups</h2>
+    <div class="btn-group">
+        <button onclick="document.getElementById('create-group-modal').showModal()">
+            ➕ New Group
+        </button>
+    </div>
+</header>
+
+<div class="card">
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Description</th>
+                <th>Members</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="groups-list" hx-get="/api/web/groups/list" hx-trigger="load">
+            <tr><td colspan="4" style="text-align: center;"><span class="spinner"></span> Loading...</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- Create Group Modal -->
+<dialog id="create-group-modal">
+    <article>
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('create-group-modal').close()"></button>
+            <h3>👥 Create Group</h3>
+        </header>
+        <form hx-post="/api/web/groups" 
+              hx-target="#groups-list" 
+              hx-swap="innerHTML"
+              hx-on::after-request="if(event.detail.successful) { document.getElementById('create-group-modal').close(); this.reset(); showToast('Group created'); }">
+            <label>
+                Group Name *
+                <input type="text" name="name" required placeholder="developers">
+            </label>
+            
+            <label>
+                Description
+                <input type="text" name="description" placeholder="Development team">
+            </label>
+            
+            <label>
+                Members
+                <input type="text" name="members" placeholder="john jane admin">
+                <small>Space-separated usernames</small>
+            </label>
+            
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('create-group-modal').close()">Cancel</button>
+                <button type="submit">Create Group</button>
+            </footer>
+        </form>
+    </article>
+</dialog>
+{% endblock %}

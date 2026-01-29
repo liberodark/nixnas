@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}SSH - NixNAS{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <h2>🔐 SSH Service</h2>
+</header>
+
+<div class="card">
+    <div class="btn-group" style="margin-bottom: 1rem;">
+        <label>
+            <input type="checkbox" role="switch" 
+                   {% if ssh_enabled %}checked{% endif %}
+                   hx-post="/api/web/ssh/toggle"
+                   hx-swap="none"
+                   hx-indicator="#ssh-toggle-spinner">
+            SSH Service Enabled
+            <span id="ssh-toggle-spinner" class="htmx-indicator spinner"></span>
+        </label>
+    </div>
+    
+    <form hx-post="/api/web/ssh/settings" hx-swap="none" hx-on::after-request="showToast('SSH settings saved')">
+        <fieldset>
+            <legend>🔒 Security</legend>
+            <div class="grid">
+                <label>
+                    Port
+                    <input type="number" name="port" value="{{ ssh_port }}" min="1" max="65535">
+                </label>
+                <label>
+                    <input type="checkbox" name="permit_root_login" {% if permit_root_login %}checked{% endif %}>
+                    Permit Root Login
+                </label>
+            </div>
+            <div class="grid">
+                <label>
+                    <input type="checkbox" name="password_auth" {% if password_auth %}checked{% endif %}>
+                    Password Authentication
+                </label>
+                <label>
+                    <input type="checkbox" name="pubkey_auth" checked {% if pubkey_auth %}checked{% endif %}>
+                    Public Key Authentication
+                </label>
+            </div>
+        </fieldset>
+        
+        <footer>
+            <button type="submit">💾 Save Settings</button>
+        </footer>
+    </form>
+</div>
+{% endblock %}

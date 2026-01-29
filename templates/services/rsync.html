@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}Rsync - NixNAS{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <h2>🔄 Rsync Service</h2>
+    <div class="btn-group">
+        <button onclick="document.getElementById('create-module-modal').showModal()">
+            ➕ New Module
+        </button>
+    </div>
+</header>
+
+<div class="card" style="margin-bottom: 1rem;">
+    <div style="display: flex; align-items: center; gap: 1rem;">
+        <label style="margin: 0;">
+            <input type="checkbox" role="switch" 
+                   {% if rsync_enabled %}checked{% endif %}
+                   hx-post="/api/web/rsync/toggle"
+                   hx-swap="none"
+                   hx-indicator="#rsync-toggle-spinner">
+            Rsync Daemon
+            <span id="rsync-toggle-spinner" class="htmx-indicator spinner"></span>
+        </label>
+        <span class="badge {% if rsync_enabled %}badge-success{% else %}badge-warning{% endif %}">
+            {% if rsync_enabled %}Enabled{% else %}Disabled{% endif %}
+        </span>
+    </div>
+</div>
+
+<div class="card">
+    <h3>📦 Modules</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Path</th>
+                <th>User/Group</th>
+                <th>Access</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="rsync-modules-list" hx-get="/api/web/rsync/modules/list" hx-trigger="load">
+            <tr><td colspan="5" style="text-align: center;"><span class="spinner"></span> Loading...</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- Create Module Modal -->
+<dialog id="create-module-modal">
+    <article style="max-width: 700px; max-height: 90vh; overflow-y: auto;">
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('create-module-modal').close()"></button>
+            <h3>📦 Create Rsync Module</h3>
+        </header>
+        <form hx-post="/api/web/rsync/modules" 
+              hx-target="#rsync-modules-list" 
+              hx-swap="innerHTML"
+              hx-on::after-request="if(event.detail.successful) { document.getElementById('create-module-modal').close(); this.reset(); showToast('Module created'); }">
+            
+            <div class="grid">
+                <label>
+                    Module Name *
+                    <input type="text" name="name" required placeholder="backup">
+                </label>
+                <label>
+                    Path *
+                    <input type="text" name="path" required placeholder="/mnt/data/backup">
+                </label>
+            </div>
+            
+            <label>
+                Comment
+                <input type="text" name="comment" placeholder="Backup share">
+            </label>
+            
+            <div class="grid">
+                <label>
+                    User
+                    <input type="text" name="uid" value="nobody" placeholder="nobody">
+                    <small>User for file transfers</small>
+                </label>
+                <label>
+                    Group
+                    <input type="text" name="gid" value="nogroup" placeholder="nogroup">
+                    <small>Group for file transfers</small>
+                </label>
+            </div>
+            
+            <fieldset>
+                <legend>Security</legend>
+                <div class="grid">
+                    <label>
+                        <input type="checkbox" name="use_chroot" checked>
+                        Use Chroot
+                    </label>
+                    <label>
+                        <input type="checkbox" name="auth_users">
+                        Require Authentication
+                    </label>
+                </div>
+            </fieldset>
+            
+            <fieldset>
+                <legend>Access Mode</legend>
+                <div class="grid">
+                    <label>
+                        <input type="checkbox" name="read_only" checked>
+                        Read Only
+                    </label>
+                    <label>
+                        <input type="checkbox" name="write_only">
+                        Write Only
+                    </label>
+                </div>
+                <label>
+                    <input type="checkbox" name="list" checked>
+                    List Module (visible in module list)
+                </label>
+            </fieldset>
+            
+            <label>
+                Max Connections
+                <input type="number" name="max_connections" value="0" min="0">
+                <small>0 = unlimited</small>
+            </label>
+            
+            <div class="grid">
+                <label>
+                    Allowed Hosts
+                    <input type="text" name="hosts_allow" placeholder="192.168.1.0/24">
+                    <small>Comma or space separated</small>
+                </label>
+                <label>
+                    Denied Hosts
+                    <input type="text" name="hosts_deny" placeholder="">
+                    <small>Comma or space separated</small>
+                </label>
+            </div>
+            
+            <details>
+                <summary>Extra Options</summary>
+                <label>
+                    Additional rsync options
+                    <textarea name="extra_options" rows="2" placeholder="timeout = 300"></textarea>
+                    <small>One option per line (key = value format)</small>
+                </label>
+            </details>
+            
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('create-module-modal').close()">Cancel</button>
+                <button type="submit">Create Module</button>
+            </footer>
+        </form>
+    </article>
+</dialog>
+{% endblock %}

@@ -1,0 +1,613 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - NixNAS{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <h2>🏠 Dashboard</h2>
+    <div class="btn-group" id="build-actions">
+        <button hx-post="/api/web/system/dry-build" 
+                hx-target="#build-output"
+                hx-swap="innerHTML"
+                hx-disabled-elt="#build-actions button"
+                class="outline">
+            <span class="htmx-indicator spinner"></span>
+            🔍 Dry Build
+        </button>
+        <button hx-post="/api/web/system/apply" 
+                hx-target="#build-output"
+                hx-swap="innerHTML"
+                hx-disabled-elt="#build-actions button"
+                hx-confirm="Apply configuration and rebuild NixOS?">
+            <span class="htmx-indicator spinner"></span>
+            🚀 Apply Config
+        </button>
+    </div>
+</header>
+
+<div id="build-output"></div>
+
+<!-- Live Metrics Section -->
+<div class="card" style="margin-bottom: 1.5rem; overflow: hidden;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3 style="margin: 0;">📊 Live System Metrics</h3>
+        <div class="connection-status" id="ws-status">
+            <span class="status-dot disconnected"></span>
+            <span>Connecting...</span>
+        </div>
+    </div>
+    
+    <div class="live-metrics-grid">
+        <div class="live-metric">
+            <div class="live-metric-header">
+                <span>CPU</span>
+                <span class="live-value" id="live-cpu">--%</span>
+            </div>
+            <div class="chart-container">
+                <canvas id="chart-cpu"></canvas>
+            </div>
+        </div>
+        
+        <div class="live-metric">
+            <div class="live-metric-header">
+                <span>Memory</span>
+                <span class="live-value" id="live-memory">--%</span>
+            </div>
+            <div class="chart-container">
+                <canvas id="chart-memory"></canvas>
+            </div>
+        </div>
+        
+        <div class="live-metric">
+            <div class="live-metric-header">
+                <span>Network</span>
+                <span class="live-value" id="live-network">-- / --</span>
+            </div>
+            <div class="chart-container">
+                <canvas id="chart-network"></canvas>
+            </div>
+        </div>
+        
+        <div class="live-metric">
+            <div class="live-metric-header">
+                <span>Disk I/O</span>
+                <span class="live-value" id="live-disk">-- / --</span>
+            </div>
+            <div class="chart-container">
+                <canvas id="chart-disk"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <div style="margin-top: 1rem; display: flex; gap: 1rem; justify-content: center;">
+        <button class="outline small" onclick="setTimeRange(15)">15m</button>
+        <button class="outline small" onclick="setTimeRange(60)">1h</button>
+        <button class="outline small" onclick="setTimeRange(360)">6h</button>
+        <button class="outline small" onclick="setTimeRange(1440)">24h</button>
+    </div>
+</div>
+
+<!-- Main Dashboard Grid -->
+<div class="dashboard-grid">
+    <!-- System Info Card -->
+    <div class="card dashboard-card">
+        <h3>💻 System Information</h3>
+        <div class="info-grid">
+            <div class="info-item">
+                <span class="info-label">Hostname</span>
+                <span class="info-value">{{ system_info.hostname }}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">System</span>
+                <span class="info-value">NixOS</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Kernel</span>
+                <span class="info-value">{{ system_info.kernel }}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Architecture</span>
+                <span class="info-value">{{ system_info.arch }}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Uptime</span>
+                <span class="info-value">{{ system_info.uptime }}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">System Time</span>
+                <span class="info-value">{{ system_info.datetime }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- CPU Card -->
+    <div class="card dashboard-card">
+        <h3>⚡ Processor</h3>
+        <div class="info-item" style="margin-bottom: 0.5rem;">
+            <span class="info-label">Model</span>
+            <span class="info-value small">{{ system_info.cpu_model }}</span>
+        </div>
+        <div class="info-item" style="margin-bottom: 1rem;">
+            <span class="info-label">Cores</span>
+            <span class="info-value">{{ system_info.cpu_cores }}</span>
+        </div>
+        
+        <h4>CPU Usage</h4>
+        <div class="cpu-usage-display">
+            <div class="usage-bar large">
+                <div class="usage-fill {% if system_info.cpu_usage_percent >= 90 %}critical{% elif system_info.cpu_usage_percent >= 70 %}warning{% endif %}" style="width: {{ system_info.cpu_usage_percent }}%"></div>
+                <span class="usage-text-center">{{ system_info.cpu_usage_percent }}%</span>
+            </div>
+        </div>
+        
+        <h4>Load Average</h4>
+        <div class="load-averages">
+            <div class="load-item">
+                <span class="load-value {% if load_avg.load1 > 2.0 %}warning{% endif %}">{{ load_avg.load1_str }}</span>
+                <span class="load-label">1 min</span>
+            </div>
+            <div class="load-item">
+                <span class="load-value {% if load_avg.load5 > 2.0 %}warning{% endif %}">{{ load_avg.load5_str }}</span>
+                <span class="load-label">5 min</span>
+            </div>
+            <div class="load-item">
+                <span class="load-value {% if load_avg.load15 > 2.0 %}warning{% endif %}">{{ load_avg.load15_str }}</span>
+                <span class="load-label">15 min</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Memory Card -->
+    <div class="card dashboard-card">
+        <h3>🧠 Memory</h3>
+        <div class="memory-display">
+            <div class="usage-bar large">
+                <div class="usage-fill {% if memory.used_percent >= 90 %}critical{% elif memory.used_percent >= 75 %}warning{% endif %}" style="width: {{ memory.used_percent }}%"></div>
+                <span class="usage-text-center">{{ memory.used_percent }}%</span>
+            </div>
+            <div class="memory-stats">
+                <div class="memory-stat">
+                    <span class="stat-value">{{ memory.total }}</span>
+                    <span class="stat-label">Total</span>
+                </div>
+                <div class="memory-stat">
+                    <span class="stat-value used">{{ memory.used }}</span>
+                    <span class="stat-label">Used</span>
+                </div>
+                <div class="memory-stat">
+                    <span class="stat-value free">{{ memory.available }}</span>
+                    <span class="stat-label">Available</span>
+                </div>
+            </div>
+        </div>
+        {% if memory.swap_total != "0 B" %}
+        <h4>Swap</h4>
+        <div class="memory-display">
+            <div class="usage-bar">
+                <div class="usage-fill swap" style="width: {{ memory.swap_percent }}%"></div>
+                <span class="usage-text">{{ memory.swap_percent }}%</span>
+            </div>
+            <div class="memory-stats">
+                <span class="stat-value">{{ memory.swap_used }} / {{ memory.swap_total }}</span>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Services Card -->
+    <div class="card dashboard-card">
+        <h3>🔧 Services</h3>
+        <div class="services-grid">
+            {% for service in services %}
+            <div class="service-badge {% if service.active %}active{% else %}inactive{% endif %}">
+                <span class="service-name">{{ service.name }}</span>
+                <span class="service-status">{% if service.active %}●{% else %}○{% endif %}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Network Interfaces Card -->
+    <div class="card dashboard-card">
+        <h3>🌐 Network Interfaces</h3>
+        <div class="network-list">
+            {% for iface in network_interfaces %}
+            <div class="network-item {% if iface.is_up %}up{% else %}down{% endif %}">
+                <div class="iface-name">
+                    <strong>{{ iface.name }}</strong>
+                    {% if iface.is_up %}<span class="badge badge-success">UP</span>{% else %}<span class="badge badge-secondary">DOWN</span>{% endif %}
+                </div>
+                <div class="iface-details">
+                    {% if iface.ipv4 != "-" %}<span class="ip">{{ iface.ipv4 }}</span>{% endif %}
+                    {% if iface.speed != "-" %}<span class="speed">{{ iface.speed }}</span>{% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Disk Temperatures Card -->
+    <div class="card dashboard-card">
+        <h3>🌡️ Disk Temperatures</h3>
+        <div class="temp-grid">
+            {% for disk in disk_temps %}
+            <div class="temp-item {% if disk.temp >= 55 %}hot{% elif disk.temp >= 45 %}warm{% else %}cool{% endif %}">
+                <span class="disk-name">{{ disk.name }}</span>
+                <span class="disk-temp">{{ disk.temp }}°C</span>
+            </div>
+            {% endfor %}
+            {% if disk_temps.is_empty() %}
+            <p class="muted">No SMART data available</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- SMART Status Card -->
+    <div class="card dashboard-card">
+        <h3>💚 S.M.A.R.T. Status</h3>
+        <div class="smart-grid">
+            {% for disk in smart_status %}
+            <div class="device-badge smart-{{ disk.status }}">
+                {{ disk.name }}
+            </div>
+            {% endfor %}
+            {% if smart_status.is_empty() %}
+            <p class="muted">No SMART monitoring configured. <a href="/storage/smart">Configure</a></p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ZFS ARC Stats (if ZFS is available) -->
+    {% if zfs_arc.total > 0 %}
+    <div class="card dashboard-card">
+        <h3>📊 ZFS ARC</h3>
+        <div class="zfs-arc-display">
+            <div class="usage-bar large">
+                <div class="usage-fill zfs-hit" style="width: {{ zfs_arc.hit_percent }}%"></div>
+                <span class="usage-text-center">{{ zfs_arc.hit_percent }}% Hits</span>
+            </div>
+            <div class="arc-stats-row">
+                <div class="arc-stat">
+                    <span class="arc-value hits">{{ zfs_arc.hits }}</span>
+                    <span class="arc-label">Hits</span>
+                </div>
+                <div class="arc-stat">
+                    <span class="arc-value misses">{{ zfs_arc.misses }}</span>
+                    <span class="arc-label">Misses</span>
+                </div>
+                <div class="arc-stat">
+                    <span class="arc-value">{{ zfs_arc.size }}</span>
+                    <span class="arc-label">ARC Size</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Storage Overview -->
+<div class="card">
+    <h3>💾 Filesystems</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Device</th>
+                <th>Mount Point</th>
+                <th>Size</th>
+                <th>Available</th>
+                <th>Usage</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for fs in filesystems %}
+            <tr>
+                <td><code>{{ fs.filesystem }}</code></td>
+                <td><code>{{ fs.mountpoint }}</code></td>
+                <td>{{ fs.size_human }}</td>
+                <td>{{ fs.available_human }}</td>
+                <td>
+                    <div class="usage-bar">
+                        <div class="usage-fill {% if fs.use_percent >= 90 %}critical{% elif fs.use_percent >= 75 %}warning{% endif %}" style="width: {{ fs.use_percent }}%"></div>
+                        <span class="usage-text">{{ fs.use_percent }}%</span>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Quick Stats Grid -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="label">Disks</div>
+        <div class="value">{{ disk_count }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="label">SMB Shares</div>
+        <div class="value">{{ smb_share_count }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="label">NFS Exports</div>
+        <div class="value">{{ nfs_export_count }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="label">ZFS Pools</div>
+        <div class="value">{{ zfs_pool_count }}</div>
+    </div>
+</div>
+
+
+<!-- Chart.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+<script>
+// Chart configuration
+const chartConfig = {
+    type: 'line',
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        resizeDelay: 200,
+        plugins: { legend: { display: false } },
+        scales: {
+            x: { display: false },
+            y: { 
+                display: true,
+                min: 0,
+                grid: { color: 'rgba(255,255,255,0.1)' },
+                ticks: { color: '#888', font: { size: 10 } }
+            }
+        },
+        elements: {
+            point: { radius: 0 },
+            line: { tension: 0.3, borderWidth: 2 }
+        }
+    }
+};
+
+// Initialize charts
+const maxPoints = 60;
+const cpuData = { labels: [], data: [] };
+const memData = { labels: [], data: [] };
+const netRxData = { labels: [], data: [] };
+const netTxData = { labels: [], data: [] };
+const diskReadData = { labels: [], data: [] };
+const diskWriteData = { labels: [], data: [] };
+
+let cpuChart, memChart, netChart, diskChart;
+
+function initCharts() {
+    const cpuCtx = document.getElementById('chart-cpu').getContext('2d');
+    cpuChart = new Chart(cpuCtx, {
+        ...chartConfig,
+        data: {
+            labels: cpuData.labels,
+            datasets: [{
+                data: cpuData.data,
+                borderColor: '#3b82f6',
+                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                fill: true
+            }]
+        },
+        options: { ...chartConfig.options, scales: { ...chartConfig.options.scales, y: { ...chartConfig.options.scales.y, max: 100 } } }
+    });
+
+    const memCtx = document.getElementById('chart-memory').getContext('2d');
+    memChart = new Chart(memCtx, {
+        ...chartConfig,
+        data: {
+            labels: memData.labels,
+            datasets: [{
+                data: memData.data,
+                borderColor: '#22c55e',
+                backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                fill: true
+            }]
+        },
+        options: { ...chartConfig.options, scales: { ...chartConfig.options.scales, y: { ...chartConfig.options.scales.y, max: 100 } } }
+    });
+
+    const netCtx = document.getElementById('chart-network').getContext('2d');
+    netChart = new Chart(netCtx, {
+        ...chartConfig,
+        data: {
+            labels: netRxData.labels,
+            datasets: [
+                { data: netRxData.data, borderColor: '#06b6d4', label: 'RX' },
+                { data: netTxData.data, borderColor: '#f59e0b', label: 'TX' }
+            ]
+        }
+    });
+
+    const diskCtx = document.getElementById('chart-disk').getContext('2d');
+    diskChart = new Chart(diskCtx, {
+        ...chartConfig,
+        data: {
+            labels: diskReadData.labels,
+            datasets: [
+                { data: diskReadData.data, borderColor: '#8b5cf6', label: 'Read' },
+                { data: diskWriteData.data, borderColor: '#ec4899', label: 'Write' }
+            ]
+        }
+    });
+}
+
+function formatBytes(bytes) {
+    if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + ' GB/s';
+    if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB/s';
+    if (bytes >= 1024) return (bytes / 1024).toFixed(1) + ' KB/s';
+    return bytes.toFixed(0) + ' B/s';
+}
+
+function addDataPoint(arr, value) {
+    arr.push(value);
+    if (arr.length > maxPoints) arr.shift();
+}
+
+// Track previous values for delta calculation
+let prevNetRx = 0;
+let prevNetTx = 0;
+let prevDiskRead = 0;
+let prevDiskWrite = 0;
+let isFirstUpdate = true;
+
+function updateCharts(snapshot) {
+    const now = new Date().toLocaleTimeString();
+    
+    // CPU
+    addDataPoint(cpuData.labels, now);
+    addDataPoint(cpuData.data, snapshot.cpu_percent);
+    document.getElementById('live-cpu').textContent = snapshot.cpu_percent.toFixed(1) + '%';
+    
+    // Memory
+    addDataPoint(memData.labels, now);
+    addDataPoint(memData.data, snapshot.memory_percent);
+    document.getElementById('live-memory').textContent = snapshot.memory_percent.toFixed(1) + '%';
+    
+    // Network (calculate rate from cumulative)
+    let netRxRate = 0;
+    let netTxRate = 0;
+    if (!isFirstUpdate && prevNetRx > 0) {
+        netRxRate = Math.max(0, (snapshot.network_rx_bytes - prevNetRx) / 2); // /2 because 2 sec interval
+        netTxRate = Math.max(0, (snapshot.network_tx_bytes - prevNetTx) / 2);
+    }
+    prevNetRx = snapshot.network_rx_bytes;
+    prevNetTx = snapshot.network_tx_bytes;
+    
+    addDataPoint(netRxData.labels, now);
+    addDataPoint(netRxData.data, netRxRate);
+    addDataPoint(netTxData.data, netTxRate);
+    document.getElementById('live-network').textContent = 
+        formatBytes(netRxRate) + ' ↓ / ' + formatBytes(netTxRate) + ' ↑';
+    
+    // Disk I/O (calculate rate from cumulative)
+    let diskReadRate = 0;
+    let diskWriteRate = 0;
+    if (!isFirstUpdate && prevDiskRead > 0) {
+        diskReadRate = Math.max(0, (snapshot.disk_read_bytes - prevDiskRead) / 2);
+        diskWriteRate = Math.max(0, (snapshot.disk_write_bytes - prevDiskWrite) / 2);
+    }
+    prevDiskRead = snapshot.disk_read_bytes;
+    prevDiskWrite = snapshot.disk_write_bytes;
+    
+    addDataPoint(diskReadData.labels, now);
+    addDataPoint(diskReadData.data, diskReadRate);
+    addDataPoint(diskWriteData.data, diskWriteRate);
+    document.getElementById('live-disk').textContent = 
+        formatBytes(diskReadRate) + ' R / ' + formatBytes(diskWriteRate) + ' W';
+    
+    isFirstUpdate = false;
+    
+    // Update charts
+    cpuChart.update('none');
+    memChart.update('none');
+    netChart.update('none');
+    diskChart.update('none');
+}
+
+// WebSocket connection
+let ws;
+let reconnectAttempts = 0;
+
+function connectWebSocket() {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(protocol + '//' + window.location.host + '/api/web/metrics/ws');
+    
+    ws.onopen = () => {
+        document.getElementById('ws-status').innerHTML = 
+            '<span class="status-dot connected"></span><span>Live</span>';
+        reconnectAttempts = 0;
+    };
+    
+    ws.onmessage = (event) => {
+        try {
+            const snapshot = JSON.parse(event.data);
+            updateCharts(snapshot);
+        } catch (e) {
+            console.error('Failed to parse metrics:', e);
+        }
+    };
+    
+    ws.onclose = () => {
+        document.getElementById('ws-status').innerHTML = 
+            '<span class="status-dot disconnected"></span><span>Disconnected</span>';
+        
+        // Reconnect with exponential backoff
+        reconnectAttempts++;
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+        setTimeout(connectWebSocket, delay);
+    };
+    
+    ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+    };
+}
+
+// Load historical data
+async function loadHistory(minutes) {
+    try {
+        const response = await fetch('/api/web/metrics/history?minutes=' + minutes);
+        const history = await response.json();
+        
+        // Clear current data
+        cpuData.labels.length = 0;
+        cpuData.data.length = 0;
+        memData.labels.length = 0;
+        memData.data.length = 0;
+        netRxData.labels.length = 0;
+        netRxData.data.length = 0;
+        netTxData.data.length = 0;
+        diskReadData.labels.length = 0;
+        diskReadData.data.length = 0;
+        diskWriteData.data.length = 0;
+        
+        // Populate with history
+        history.cpu.forEach(p => {
+            const time = new Date(p.timestamp * 1000).toLocaleTimeString();
+            cpuData.labels.push(time);
+            cpuData.data.push(p.value);
+        });
+        
+        history.memory.forEach(p => {
+            const time = new Date(p.timestamp * 1000).toLocaleTimeString();
+            memData.labels.push(time);
+            memData.data.push(p.value);
+        });
+        
+        history.network_rx.forEach((p, i) => {
+            const time = new Date(p.timestamp * 1000).toLocaleTimeString();
+            netRxData.labels.push(time);
+            netRxData.data.push(p.value);
+            if (history.network_tx[i]) netTxData.data.push(history.network_tx[i].value);
+        });
+        
+        history.disk_read.forEach((p, i) => {
+            const time = new Date(p.timestamp * 1000).toLocaleTimeString();
+            diskReadData.labels.push(time);
+            diskReadData.data.push(p.value);
+            if (history.disk_write[i]) diskWriteData.data.push(history.disk_write[i].value);
+        });
+        
+        cpuChart.update();
+        memChart.update();
+        netChart.update();
+        diskChart.update();
+    } catch (e) {
+        console.error('Failed to load history:', e);
+    }
+}
+
+function setTimeRange(minutes) {
+    loadHistory(minutes);
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', () => {
+    initCharts();
+    connectWebSocket();
+    loadHistory(60); // Load last hour by default
+});
+</script>
+{% endblock %}
