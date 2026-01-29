@@ -30,7 +30,7 @@ Add to your `flake.nix`:
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    nixnas.url = "github:nixnas/nixnas";
+    nixnas.url = "github:liberodark/nixnas";
   };
 
   outputs = { self, nixpkgs, nixnas }: {

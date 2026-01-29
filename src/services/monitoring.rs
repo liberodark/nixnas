@@ -353,16 +353,14 @@ impl MonitoringService {
                         .await;
                     sent.zfs_errors.insert(pool.name.clone());
                 }
-            } else {
-                if sent.zfs_errors.remove(&pool.name) {
-                    tracing::info!("ZFS pool {} recovered to ONLINE", pool.name);
-                    let _ = notifier
-                        .send(
-                            &format!("ZFS POOL RECOVERED: {}", pool.name),
-                            &format!("ZFS pool '{}' is back ONLINE.", pool.name),
-                        )
-                        .await;
-                }
+            } else if sent.zfs_errors.remove(&pool.name) {
+                tracing::info!("ZFS pool {} recovered to ONLINE", pool.name);
+                let _ = notifier
+                    .send(
+                        &format!("ZFS POOL RECOVERED: {}", pool.name),
+                        &format!("ZFS pool '{}' is back ONLINE.", pool.name),
+                    )
+                    .await;
             }
         }
 
@@ -547,16 +545,14 @@ impl MonitoringService {
                         .await;
                     sent.service_failures.insert(service.to_string());
                 }
-            } else {
-                if sent.service_failures.remove(service) {
-                    tracing::info!("Service {} recovered", name);
-                    let _ = notifier
-                        .send(
-                            &format!("SERVICE RECOVERED: {}", name),
-                            &format!("Service '{}' is running again.", name),
-                        )
-                        .await;
-                }
+            } else if sent.service_failures.remove(service) {
+                tracing::info!("Service {} recovered", name);
+                let _ = notifier
+                    .send(
+                        &format!("SERVICE RECOVERED: {}", name),
+                        &format!("Service '{}' is running again.", name),
+                    )
+                    .await;
             }
         }
 

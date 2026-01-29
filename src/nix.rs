@@ -1293,16 +1293,17 @@ impl NixGenerator {
         if !share.extra_options.is_empty() {
             for line in share.extra_options.lines() {
                 let line = line.trim();
-                if !line.is_empty() && !line.starts_with('#') {
-                    if let Some((key, value)) = line.split_once('=') {
-                        writeln!(
-                            content,
-                            "        \"{}\" = \"{}\";",
-                            key.trim(),
-                            value.trim()
-                        )
-                        .unwrap();
-                    }
+                if !line.is_empty()
+                    && !line.starts_with('#')
+                    && let Some((key, value)) = line.split_once('=')
+                {
+                    writeln!(
+                        content,
+                        "        \"{}\" = \"{}\";",
+                        key.trim(),
+                        value.trim()
+                    )
+                    .unwrap();
                 }
             }
         }
