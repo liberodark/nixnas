@@ -190,7 +190,7 @@ curl -X POST http://localhost:8080/api/rpc \
 
 ```bash
 # Enter development shell
-nix develop
+nix-shell
 
 # Build
 cargo build
