@@ -7851,7 +7851,7 @@ async fn list_system_groups(State(state): State<Arc<WebState>>) -> impl IntoResp
     let groups = &nas_state.system_groups;
 
     if groups.is_empty() {
-        return Html(r##"<tr><td colspan="3" style="text-align: center; color: var(--pico-muted-color);">No groups configured. Click "New Group" to create one.</td></tr>"##.to_string());
+        return Html(r##"<tr><td colspan="4" style="text-align: center; color: var(--pico-muted-color);">No groups configured. Click "New Group" to create one.</td></tr>"##.to_string());
     }
 
     let mut html = String::new();
@@ -7862,6 +7862,7 @@ async fn list_system_groups(State(state): State<Arc<WebState>>) -> impl IntoResp
             r##"
         <tr id="group-{id}">
             <td><code>{name}</code></td>
+            <td>{description}</td>
             <td>{members}</td>
             <td>
                 <button class="btn-icon btn-danger" title="Delete"
@@ -7874,6 +7875,11 @@ async fn list_system_groups(State(state): State<Arc<WebState>>) -> impl IntoResp
         "##,
             id = group.id,
             name = group.name,
+            description = if group.description.is_empty() {
+                "-".to_string()
+            } else {
+                group.description.clone()
+            },
             members = if members.is_empty() {
                 "-".to_string()
             } else {
