@@ -7066,10 +7066,15 @@ async fn create_nfs_export(
     let export = NfsExport {
         id: Uuid::new_v4(),
         path: form.path,
-        clients: vec![NfsClient {
-            host: form.client_host,
-            options: opts,
-        }],
+        clients: form
+            .client_host
+            .split(',')
+            .flat_map(|s| s.split_whitespace())
+            .map(|host| NfsClient {
+                host: host.to_string(),
+                options: opts.clone(),
+            })
+            .collect(),
         extra_options: form.extra_options.unwrap_or_default(),
     };
     let export_view: NfsExportView = export.clone().into();
