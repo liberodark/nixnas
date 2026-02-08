@@ -1,0 +1,62 @@
+<form hx-put="/api/web/nfs/exports/{{ export.id }}" 
+      hx-target="#export-{{ export.id }}"
+      hx-swap="outerHTML"
+      hx-on::after-request="if(event.detail.successful) { document.getElementById('edit-modal').close(); showToast('Export updated'); }">
+    <input type="hidden" name="id" value="{{ export.id }}">
+    
+    <label>
+        Path
+        <input type="text" name="path" value="{{ export.path }}" required>
+    </label>
+    
+    <label>
+        Client Hosts
+        <input type="text" name="client_host" value="{{ export.clients_str }}" required>
+        <small>Space or comma separated IPs/subnets, or * for all</small>
+    </label>
+    
+    <fieldset>
+        <legend>Permissions</legend>
+        <label>
+            Permission
+            <select name="permission">
+                <option value="rw" {% if export.is_rw %}selected{% endif %}>Read/Write</option>
+                <option value="ro" {% if !export.is_rw %}selected{% endif %}>Read Only</option>
+            </select>
+        </label>
+    </fieldset>
+    
+    <fieldset>
+        <legend>Options</legend>
+        <div class="grid">
+            <label>
+                <input type="checkbox" name="sync" {% if export.is_sync %}checked{% endif %}>
+                Sync
+            </label>
+            <label>
+                <input type="checkbox" name="no_root_squash" {% if export.is_no_root_squash %}checked{% endif %}>
+                No Root Squash
+            </label>
+        </div>
+        <div class="grid">
+            <label>
+                <input type="checkbox" name="subtree_check" {% if export.is_subtree_check %}checked{% endif %}>
+                Subtree Check
+            </label>
+            <label>
+                <input type="checkbox" name="insecure" {% if export.is_insecure %}checked{% endif %}>
+                Insecure (allow ports > 1024)
+            </label>
+        </div>
+    </fieldset>
+    
+    <label>
+        Extra Options
+        <input type="text" name="extra_options" value="{{ export.extra_options }}" placeholder="anonuid=1000,anongid=1000">
+    </label>
+    
+    <footer>
+        <button type="button" class="secondary" onclick="document.getElementById('edit-modal').close()">Cancel</button>
+        <button type="submit">Save Changes</button>
+    </footer>
+</form>

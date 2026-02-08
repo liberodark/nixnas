@@ -1,6 +1,6 @@
 [package]
 name = "nixnas-daemon"
-version = "1.0.2"
+version = "1.0.3"
 edition = "2024"
 authors = ["liberodark"]
 description = "NixOS NAS management daemon with web interface"

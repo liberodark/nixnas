@@ -7,6 +7,12 @@
     </td>
     <td>
         <div class="btn-group">
+            <button class="small outline" 
+                    hx-get="/api/web/nfs/exports/{{ export.id }}/edit"
+                    hx-target="#edit-modal-content"
+                    hx-on::after-request="document.getElementById('edit-modal').showModal()">
+                ✏️
+            </button>
             <button class="small outline secondary" 
                     name="delete-btn"
                     hx-delete="/api/web/nfs/exports/{{ export.id }}"

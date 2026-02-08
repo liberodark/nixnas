@@ -252,6 +252,25 @@ struct NfsRowTemplate {
 }
 
 #[derive(Template)]
+#[template(path = "shares/nfs_edit.html")]
+struct NfsEditTemplate {
+    export: NfsEditView,
+}
+
+#[derive(Clone)]
+struct NfsEditView {
+    id: String,
+    path: String,
+    clients_str: String,
+    extra_options: String,
+    is_rw: bool,
+    is_sync: bool,
+    is_no_root_squash: bool,
+    is_subtree_check: bool,
+    is_insecure: bool,
+}
+
+#[derive(Template)]
 #[template(path = "users/users.html")]
 struct UsersTemplate {
     active_page: String,
@@ -812,6 +831,8 @@ pub fn build_web_router(state: Arc<WebState>) -> Router {
         .route("/api/web/smb/users/{id}/toggle", post(toggle_samba_user))
         .route("/api/web/nfs/exports", post(create_nfs_export))
         .route("/api/web/nfs/exports/{id}", delete(delete_nfs_export))
+        .route("/api/web/nfs/exports/{id}", put(update_nfs_export))
+        .route("/api/web/nfs/exports/{id}/edit", get(get_nfs_edit_form))
         .route("/api/web/nfs/toggle", post(toggle_nfs))
         .route("/api/web/nfs/settings", get(get_nfs_settings))
         .route("/api/web/nfs/settings", post(update_nfs_settings))
@@ -7105,6 +7126,126 @@ async fn delete_nfs_export(
             (StatusCode::INTERNAL_SERVER_ERROR, "Failed").into_response()
         }
     }
+}
+
+async fn get_nfs_edit_form(
+    State(state): State<Arc<WebState>>,
+    Path(id): Path<Uuid>,
+) -> impl IntoResponse {
+    let config = state.state_manager.get_nfs().await;
+    if let Some(export) = config.exports.into_iter().find(|e| e.id == id) {
+        let first_client_opts = export.clients.first().map(|c| &c.options);
+        let has_opt = |opt: &str| {
+            first_client_opts
+                .map(|opts| opts.iter().any(|o| o == opt))
+                .unwrap_or(false)
+        };
+
+        let edit_view = NfsEditView {
+            id: export.id.to_string(),
+            path: export.path,
+            clients_str: export
+                .clients
+                .iter()
+                .map(|c| c.host.as_str())
+                .collect::<Vec<_>>()
+                .join(" "),
+            extra_options: export.extra_options,
+            is_rw: has_opt("rw"),
+            is_sync: has_opt("sync"),
+            is_no_root_squash: has_opt("no_root_squash"),
+            is_subtree_check: has_opt("subtree_check"),
+            is_insecure: has_opt("insecure"),
+        };
+
+        HtmlTemplate(NfsEditTemplate { export: edit_view }).into_response()
+    } else {
+        (StatusCode::NOT_FOUND, "Export not found").into_response()
+    }
+}
+
+#[derive(Deserialize)]
+struct UpdateExportForm {
+    path: String,
+    client_host: String,
+    #[serde(default)]
+    permission: Option<String>,
+    #[serde(default)]
+    sync: Option<String>,
+    #[serde(default)]
+    no_root_squash: Option<String>,
+    #[serde(default)]
+    subtree_check: Option<String>,
+    #[serde(default)]
+    insecure: Option<String>,
+    #[serde(default)]
+    extra_options: Option<String>,
+}
+
+async fn update_nfs_export(
+    State(state): State<Arc<WebState>>,
+    Path(id): Path<Uuid>,
+    Form(form): Form<UpdateExportForm>,
+) -> impl IntoResponse {
+    let mut opts = vec![];
+
+    if form.permission.as_deref() == Some("ro") {
+        opts.push("ro".to_string());
+    } else {
+        opts.push("rw".to_string());
+    }
+
+    if form.sync.is_some() {
+        opts.push("sync".to_string());
+    } else {
+        opts.push("async".to_string());
+    }
+
+    if form.no_root_squash.is_some() {
+        opts.push("no_root_squash".to_string());
+    } else {
+        opts.push("root_squash".to_string());
+    }
+
+    if form.subtree_check.is_some() {
+        opts.push("subtree_check".to_string());
+    } else {
+        opts.push("no_subtree_check".to_string());
+    }
+
+    if form.insecure.is_some() {
+        opts.push("insecure".to_string());
+    }
+
+    let export = NfsExport {
+        id,
+        path: form.path,
+        clients: form
+            .client_host
+            .split(',')
+            .flat_map(|s| s.split_whitespace())
+            .map(|host| NfsClient {
+                host: host.to_string(),
+                options: opts.clone(),
+            })
+            .collect(),
+        extra_options: form.extra_options.unwrap_or_default(),
+    };
+
+    let export_view: NfsExportView = export.clone().into();
+
+    match state.nfs.update_export(export).await {
+        Ok(_) => {
+            let _ = state.nix.generate_all().await;
+        }
+        Err(e) => {
+            tracing::error!("Failed to update export: {}", e);
+        }
+    }
+
+    HtmlTemplate(NfsRowTemplate {
+        export: export_view,
+    })
 }
 
 async fn toggle_nfs(State(state): State<Arc<WebState>>) -> impl IntoResponse {
