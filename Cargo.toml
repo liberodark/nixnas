@@ -23,7 +23,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 jsonwebtoken = { version = "10", features = ["rust_crypto"] }
 argon2 = "0.5"
-rand = "0.9"
+rand = "0.10"
 uuid = { version = "1", features = ["v4", "serde"] }
 urlencoding = "2"
 chrono = { version = "0.4", features = ["serde"] }
