@@ -54,9 +54,9 @@
                 </button>
             </div>
         </header>
-        
+
         <div id="btrfs-actions-{{ loop.index }}"></div>
-        
+
         <div class="compact-stats-grid">
             <div class="stat-card">
                 <div class="label">Total Size</div>
@@ -75,7 +75,7 @@
                 <div class="value">{{ fs.device_count }}</div>
             </div>
         </div>
-        
+
         <details>
             <summary>Devices ({{ fs.devices.len() }})</summary>
             <table>
@@ -97,7 +97,7 @@
                 </tbody>
             </table>
         </details>
-        
+
         <details>
             <summary>UUID</summary>
             <code style="word-break: break-all;">{{ fs.uuid }}</code>
@@ -116,16 +116,16 @@
             <button aria-label="Close" rel="prev" onclick="document.getElementById('create-modal').close()"></button>
             <h3>Create Btrfs Filesystem</h3>
         </header>
-        <form hx-post="/api/web/btrfs/create" 
+        <form hx-post="/api/web/btrfs/create"
               hx-target="#btrfs-result"
               hx-disabled-elt="#create-btrfs-btn">
             <input type="hidden" name="devices" id="btrfs-devices" value="">
-            
+
             <label>
                 Label (optional)
                 <input type="text" name="label" placeholder="data">
             </label>
-            
+
             <div class="grid">
                 <label>
                     Data Profile
@@ -156,7 +156,7 @@
                     </select>
                 </label>
             </div>
-            
+
             <label>
                 Select Disks
                 <div id="btrfs-disk-selector">
@@ -164,7 +164,7 @@
                 </div>
                 <small>Select disks based on RAID level requirements</small>
             </label>
-            
+
             <article style="background: #3b82f620; border-color: #3b82f6; margin-top: 1rem;">
                 <p style="margin: 0;"><strong>📋 RAID Level Requirements:</strong></p>
                 <ul style="margin: 0.5rem 0 0 1rem; padding: 0;">
@@ -176,9 +176,9 @@
                     <li><strong>RAID 10:</strong> min 4 disks, striped mirrors</li>
                 </ul>
             </article>
-            
+
             <div id="btrfs-result"></div>
-            
+
             <footer>
                 <button type="button" class="secondary" onclick="document.getElementById('create-modal').close()">Cancel</button>
                 <button type="submit" id="create-btrfs-btn">
@@ -197,7 +197,7 @@
             <button aria-label="Close" rel="prev" onclick="document.getElementById('btrfs-add-device-modal').close()"></button>
             <h3>💾 Add Device to <span id="btrfs-fs-name"></span></h3>
         </header>
-        <form hx-post="/api/web/btrfs/add-device" 
+        <form hx-post="/api/web/btrfs/add-device"
               hx-target="#btrfs-add-result"
               hx-swap="innerHTML">
             <input type="hidden" name="mountpoint" id="btrfs-add-mountpoint">
@@ -235,14 +235,14 @@ function openBtrfsAddDeviceModal(mountpoint, label) {
     document.getElementById('btrfs-fs-name').textContent = label || mountpoint;
     document.getElementById('btrfs-add-mountpoint').value = mountpoint;
     document.getElementById('btrfs-add-result').innerHTML = '';
-    
+
     // Load available disks
     fetch('/api/web/storage/available-disks-select')
         .then(r => r.text())
         .then(html => {
             document.getElementById('btrfs-add-device-select').innerHTML = html;
         });
-    
+
     document.getElementById('btrfs-add-device-modal').showModal();
 }
 </script>

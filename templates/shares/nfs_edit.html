@@ -1,20 +1,20 @@
-<form hx-put="/api/web/nfs/exports/{{ export.id }}" 
+<form hx-put="/api/web/nfs/exports/{{ export.id }}"
       hx-target="#export-{{ export.id }}"
       hx-swap="outerHTML"
       hx-on::after-request="if(event.detail.successful) { document.getElementById('edit-modal').close(); showToast('Export updated'); }">
     <input type="hidden" name="id" value="{{ export.id }}">
-    
+
     <label>
         Path
         <input type="text" name="path" value="{{ export.path }}" required>
     </label>
-    
+
     <label>
         Client Hosts
         <input type="text" name="client_host" value="{{ export.clients_str }}" required>
         <small>Space or comma separated IPs/subnets, or * for all</small>
     </label>
-    
+
     <fieldset>
         <legend>Permissions</legend>
         <label>
@@ -25,7 +25,7 @@
             </select>
         </label>
     </fieldset>
-    
+
     <fieldset>
         <legend>Options</legend>
         <div class="grid">
@@ -49,12 +49,12 @@
             </label>
         </div>
     </fieldset>
-    
+
     <label>
         Extra Options
         <input type="text" name="extra_options" value="{{ export.extra_options }}" placeholder="anonuid=1000,anongid=1000">
     </label>
-    
+
     <footer>
         <button type="button" class="secondary" onclick="document.getElementById('edit-modal').close()">Cancel</button>
         <button type="submit">Save Changes</button>

@@ -18,7 +18,7 @@
 <div class="card">
     <div class="btn-group" style="margin-bottom: 1rem;">
         <label>
-            <input type="checkbox" role="switch" 
+            <input type="checkbox" role="switch"
                    {% if nfs_enabled %}checked{% endif %}
                    hx-post="/api/web/nfs/toggle"
                    hx-swap="none"
@@ -27,7 +27,7 @@
             <span id="nfs-toggle-spinner" class="htmx-indicator spinner"></span>
         </label>
     </div>
-    
+
     <table>
         <thead>
             <tr>
@@ -42,7 +42,7 @@
             {% endfor %}
         </tbody>
     </table>
-    
+
     {% if exports.is_empty() %}
     <p style="text-align: center; color: var(--pico-muted-color);">
         No exports configured yet. Click "New Export" to create one.
@@ -70,8 +70,8 @@
             <button aria-label="Close" rel="prev" onclick="document.getElementById('create-modal').close()"></button>
             <h3>Create NFS Export</h3>
         </header>
-        <form hx-post="/api/web/nfs/exports" 
-              hx-target="#exports-list" 
+        <form hx-post="/api/web/nfs/exports"
+              hx-target="#exports-list"
               hx-swap="beforeend"
               hx-on::after-request="if(event.detail.successful) { document.getElementById('create-modal').close(); this.reset(); showToast('Export created'); }">
             <label>

@@ -481,8 +481,7 @@ pub async fn attach_device(
     Ok(())
 }
 
-/// Detach a device from a mirror.
-#[allow(dead_code)]
+/// Detach a device from a pool (mirror or replacing device).
 pub async fn detach_device(pool: &str, device: &str) -> CmdResult<()> {
     run_ok("zpool", &["detach", pool, device]).await?;
     Ok(())
@@ -513,6 +512,30 @@ pub async fn clear_errors(pool: &str, device: Option<&str>) -> CmdResult<()> {
     if let Some(dev) = device {
         args.push(dev);
     }
+    run_ok("zpool", &args).await?;
+    Ok(())
+}
+
+/// Take a device offline.
+pub async fn offline_device(pool: &str, device: &str, temporary: bool) -> CmdResult<()> {
+    let mut args = vec!["offline"];
+    if temporary {
+        args.push("-t");
+    }
+    args.push(pool);
+    args.push(device);
+    run_ok("zpool", &args).await?;
+    Ok(())
+}
+
+/// Bring a device online.
+pub async fn online_device(pool: &str, device: &str, expand: bool) -> CmdResult<()> {
+    let mut args = vec!["online"];
+    if expand {
+        args.push("-e");
+    }
+    args.push(pool);
+    args.push(device);
     run_ok("zpool", &args).await?;
     Ok(())
 }

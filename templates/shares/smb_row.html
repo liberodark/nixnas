@@ -42,7 +42,7 @@
                     hx-on::after-request="document.getElementById('acl-modal').showModal()">
                 🔐
             </button>
-            <button class="small outline secondary" 
+            <button class="small outline secondary"
                     title="Delete share"
                     name="delete-btn"
                     hx-delete="/api/web/smb/shares/{{ share.id }}"

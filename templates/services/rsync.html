@@ -15,7 +15,7 @@
 <div class="card" style="margin-bottom: 1rem;">
     <div style="display: flex; align-items: center; gap: 1rem;">
         <label style="margin: 0;">
-            <input type="checkbox" role="switch" 
+            <input type="checkbox" role="switch"
                    {% if rsync_enabled %}checked{% endif %}
                    hx-post="/api/web/rsync/toggle"
                    hx-swap="none"
@@ -54,11 +54,11 @@
             <button aria-label="Close" rel="prev" onclick="document.getElementById('create-module-modal').close()"></button>
             <h3>📦 Create Rsync Module</h3>
         </header>
-        <form hx-post="/api/web/rsync/modules" 
-              hx-target="#rsync-modules-list" 
+        <form hx-post="/api/web/rsync/modules"
+              hx-target="#rsync-modules-list"
               hx-swap="innerHTML"
               hx-on::after-request="if(event.detail.successful) { document.getElementById('create-module-modal').close(); this.reset(); showToast('Module created'); }">
-            
+
             <div class="grid">
                 <label>
                     Module Name *
@@ -69,12 +69,12 @@
                     <input type="text" name="path" required placeholder="/mnt/data/backup">
                 </label>
             </div>
-            
+
             <label>
                 Comment
                 <input type="text" name="comment" placeholder="Backup share">
             </label>
-            
+
             <div class="grid">
                 <label>
                     User
@@ -87,7 +87,7 @@
                     <small>Group for file transfers</small>
                 </label>
             </div>
-            
+
             <fieldset>
                 <legend>Security</legend>
                 <div class="grid">
@@ -101,7 +101,7 @@
                     </label>
                 </div>
             </fieldset>
-            
+
             <fieldset>
                 <legend>Access Mode</legend>
                 <div class="grid">
@@ -119,13 +119,13 @@
                     List Module (visible in module list)
                 </label>
             </fieldset>
-            
+
             <label>
                 Max Connections
                 <input type="number" name="max_connections" value="0" min="0">
                 <small>0 = unlimited</small>
             </label>
-            
+
             <div class="grid">
                 <label>
                     Allowed Hosts
@@ -138,7 +138,7 @@
                     <small>Comma or space separated</small>
                 </label>
             </div>
-            
+
             <details>
                 <summary>Extra Options</summary>
                 <label>
@@ -147,7 +147,7 @@
                     <small>One option per line (key = value format)</small>
                 </label>
             </details>
-            
+
             <footer>
                 <button type="button" class="secondary" onclick="document.getElementById('create-module-modal').close()">Cancel</button>
                 <button type="submit">Create Module</button>

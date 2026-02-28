@@ -781,6 +781,12 @@ pub fn build_web_router(state: Arc<WebState>) -> Router {
             "/api/web/zfs/pools/{name}/replace",
             post(zfs_replace_device),
         )
+        .route("/api/web/zfs/pools/{name}/detach", post(zfs_detach_device))
+        .route(
+            "/api/web/zfs/pools/{name}/offline",
+            post(zfs_offline_device),
+        )
+        .route("/api/web/zfs/pools/{name}/online", post(zfs_online_device))
         .route("/api/web/zfs/pools/{name}/clear", post(zfs_clear_errors))
         .route("/api/web/zfs/pools/{name}/status", get(zfs_pool_status_raw))
         .route("/api/web/zfs/pools/{name}/vdevs", get(zfs_pool_vdevs))
@@ -866,6 +872,7 @@ pub fn build_web_router(state: Arc<WebState>) -> Router {
         )
         .route("/api/web/system/config/{file}", get(get_config_file))
         .route("/api/web/system/pending", get(get_pending_status))
+        .route("/api/web/system/reboot", post(system_reboot))
         .route("/api/web/system/backups", get(list_backups))
         .route(
             "/api/web/system/backups/restore/{filename}",
@@ -5410,6 +5417,97 @@ async fn zfs_replace_device(
     }
 }
 
+#[derive(Deserialize, Debug)]
+struct ZfsDeviceForm {
+    device: String,
+}
+
+async fn zfs_detach_device(
+    Path(name): Path<String>,
+    Form(form): Form<ZfsDeviceForm>,
+) -> impl IntoResponse {
+    match zfs::detach_device(&name, &form.device).await {
+        Ok(_) => HtmlTemplate(BuildOutputTemplate {
+            success: true,
+            title: "Device Detached".to_string(),
+            output: format!("Detached {} from pool {}", form.device, name),
+            error: String::new(),
+        }),
+        Err(e) => HtmlTemplate(BuildOutputTemplate {
+            success: false,
+            title: "Detach Failed".to_string(),
+            output: String::new(),
+            error: e.to_string(),
+        }),
+    }
+}
+
+#[derive(Deserialize, Debug)]
+struct ZfsOfflineForm {
+    device: String,
+    #[serde(default)]
+    temporary: Option<String>,
+}
+
+async fn zfs_offline_device(
+    Path(name): Path<String>,
+    Form(form): Form<ZfsOfflineForm>,
+) -> impl IntoResponse {
+    let temporary = form.temporary.is_some();
+
+    match zfs::offline_device(&name, &form.device, temporary).await {
+        Ok(_) => HtmlTemplate(BuildOutputTemplate {
+            success: true,
+            title: "Device Offline".to_string(),
+            output: format!(
+                "Device {} is now offline{}",
+                form.device,
+                if temporary { " (temporary)" } else { "" }
+            ),
+            error: String::new(),
+        }),
+        Err(e) => HtmlTemplate(BuildOutputTemplate {
+            success: false,
+            title: "Offline Failed".to_string(),
+            output: String::new(),
+            error: e.to_string(),
+        }),
+    }
+}
+
+#[derive(Deserialize, Debug)]
+struct ZfsOnlineForm {
+    device: String,
+    #[serde(default)]
+    expand: Option<String>,
+}
+
+async fn zfs_online_device(
+    Path(name): Path<String>,
+    Form(form): Form<ZfsOnlineForm>,
+) -> impl IntoResponse {
+    let expand = form.expand.is_some();
+
+    match zfs::online_device(&name, &form.device, expand).await {
+        Ok(_) => HtmlTemplate(BuildOutputTemplate {
+            success: true,
+            title: "Device Online".to_string(),
+            output: format!(
+                "Device {} is now online{}",
+                form.device,
+                if expand { " (expanded)" } else { "" }
+            ),
+            error: String::new(),
+        }),
+        Err(e) => HtmlTemplate(BuildOutputTemplate {
+            success: false,
+            title: "Online Failed".to_string(),
+            output: String::new(),
+            error: e.to_string(),
+        }),
+    }
+}
+
 #[derive(Deserialize)]
 struct CreateShareForm {
     name: String,
@@ -7449,6 +7547,26 @@ async fn upgrade_system(State(state): State<Arc<WebState>>) -> impl IntoResponse
             error: e.to_string(),
         }),
     }
+}
+
+async fn system_reboot() -> impl IntoResponse {
+    // Spawn reboot in background so we can send response first
+    tokio::spawn(async {
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+        let _ = tokio::process::Command::new("systemctl")
+            .args(["reboot"])
+            .output()
+            .await;
+    });
+
+    Html(
+        r#"
+        <article class="feedback-success">
+            <h4>🔄 System Rebooting</h4>
+            <p>The system will reboot in a few seconds. Please wait and refresh the page once it's back online.</p>
+        </article>
+    "#,
+    )
 }
 
 async fn switch_generation(

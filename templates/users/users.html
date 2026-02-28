@@ -38,8 +38,8 @@
             <button aria-label="Close" rel="prev" onclick="document.getElementById('create-user-modal').close()"></button>
             <h3>👤 Create User</h3>
         </header>
-        <form hx-post="/api/web/users" 
-              hx-target="#users-list" 
+        <form hx-post="/api/web/users"
+              hx-target="#users-list"
               hx-swap="innerHTML"
               hx-on::after-request="if(event.detail.successful) { document.getElementById('create-user-modal').close(); this.reset(); showToast('User created'); }">
             <label>
@@ -47,17 +47,17 @@
                 <input type="text" name="username" required placeholder="john">
                 <small>Lowercase letters, numbers, underscore, dash</small>
             </label>
-            
+
             <label>
                 Description
                 <input type="text" name="description" placeholder="John Doe">
             </label>
-            
+
             <label>
                 Email
                 <input type="email" name="email" placeholder="john@example.com">
             </label>
-            
+
             <div class="grid">
                 <label>
                     Password *
@@ -68,7 +68,7 @@
                     <input type="password" name="password_confirm" required minlength="4">
                 </label>
             </div>
-            
+
             <label>
                 Shell
                 <select name="shell">
@@ -78,7 +78,7 @@
                     <option value="/bin/zsh">Zsh (/bin/zsh)</option>
                 </select>
             </label>
-            
+
             <div class="grid">
                 <label>
                     UID
@@ -91,7 +91,7 @@
                     <small>Extra groups (comma or space separated)</small>
                 </label>
             </div>
-            
+
             <details>
                 <summary>SSH Keys</summary>
                 <label>
@@ -99,7 +99,7 @@
                     <textarea name="ssh_keys" rows="3" placeholder="ssh-ed25519 AAAA... user@host"></textarea>
                 </label>
             </details>
-            
+
             <details>
                 <summary>Advanced</summary>
                 <label>
@@ -111,7 +111,7 @@
                     Create Home Directory
                 </label>
             </details>
-            
+
             <footer>
                 <button type="button" class="secondary" onclick="document.getElementById('create-user-modal').close()">Cancel</button>
                 <button type="submit">Create User</button>

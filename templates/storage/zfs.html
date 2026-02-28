@@ -93,9 +93,9 @@ networking.hostId = "$(head -c 8 /etc/machine-id)";</code></pre>
                 </button>
             </div>
         </header>
-        
+
         <div id="pool-actions-{{ pool.name }}"></div>
-        
+
         <div class="compact-stats-grid">
             <div class="stat-card">
                 <div class="label">Size</div>
@@ -114,21 +114,21 @@ networking.hostId = "$(head -c 8 /etc/machine-id)";</code></pre>
                 <div class="value">{{ pool.fragmentation }}%</div>
             </div>
         </div>
-        
+
         <progress value="{{ pool.capacity }}" max="100" style="width: 100%;"></progress>
         <small>{{ pool.capacity }}% used</small>
-        
+
         <!-- Pool Status -->
         <details style="margin-top: 1rem;">
             <summary>📊 Pool Status</summary>
-            <div id="pool-status-{{ pool.name }}" 
-                 hx-get="/api/web/zfs/pools/{{ pool.name }}/status" 
+            <div id="pool-status-{{ pool.name }}"
+                 hx-get="/api/web/zfs/pools/{{ pool.name }}/status"
                  hx-trigger="revealed"
                  style="background: var(--pico-background-color); padding: 1rem; border-radius: 0.375rem; overflow-x: auto;">
                 <span class="spinner"></span> Loading status...
             </div>
         </details>
-        
+
         <!-- Datasets -->
         <details style="margin-top: 1rem;">
             <summary>📁 Datasets ({{ pool.datasets.len() }})</summary>
@@ -176,7 +176,7 @@ networking.hostId = "$(head -c 8 /etc/machine-id)";</code></pre>
                 </tbody>
             </table>
         </details>
-        
+
         <!-- Snapshots -->
         <details style="margin-top: 1rem;">
             <summary>📸 Snapshots ({{ pool.snapshots.len() }})</summary>
@@ -246,7 +246,7 @@ networking.hostId = "$(head -c 8 /etc/machine-id)";</code></pre>
     <header style="margin-bottom: 1rem;">
         <h3 style="margin: 0;">⚙️ ZFS Service Settings</h3>
     </header>
-    
+
     <div id="zfs-settings-container" hx-get="/api/web/zfs/settings" hx-trigger="load">
         <span class="spinner"></span> Loading settings...
     </div>
@@ -260,11 +260,11 @@ networking.hostId = "$(head -c 8 /etc/machine-id)";</code></pre>
             ➕ Create Policy
         </button>
     </header>
-    
+
     <div id="policies-list" hx-get="/api/web/zfs/policies" hx-trigger="load, refresh from:body">
         <span class="spinner"></span> Loading policies...
     </div>
-    
+
     <details style="margin-top: 1rem;">
         <summary>How it works</summary>
         <p style="font-size: 0.9rem; color: var(--pico-muted-color);">
@@ -291,14 +291,14 @@ networking.hostId = "$(head -c 8 /etc/machine-id)";</code></pre>
             <button aria-label="Close" rel="prev" onclick="document.getElementById('policy-modal').close()"></button>
             <h3>⏰ Create Snapshot Policy</h3>
         </header>
-        <form hx-post="/api/web/zfs/policies" 
+        <form hx-post="/api/web/zfs/policies"
               hx-target="#policy-result"
               hx-disabled-elt="#create-policy-btn">
             <label>
                 Policy Name
                 <input type="text" name="name" required placeholder="daily-backups">
             </label>
-            
+
             <label>
                 Dataset
                 {% if pools.is_empty() %}
@@ -318,14 +318,14 @@ networking.hostId = "$(head -c 8 /etc/machine-id)";</code></pre>
                 </select>
                 {% endif %}
             </label>
-            
+
             <fieldset>
                 <label>
                     <input type="checkbox" name="recursive" checked>
                     Recursive (include child datasets)
                 </label>
             </fieldset>
-            
+
             <h4 style="margin-top: 1rem;">Retention (snapshots to keep)</h4>
             <div class="btn-group" style="margin-bottom: 0.5rem;">
                 <button type="button" class="small outline" onclick="setRetention(48, 30, 8, 12, 2)">Standard</button>
@@ -355,9 +355,9 @@ networking.hostId = "$(head -c 8 /etc/machine-id)";</code></pre>
                     <input type="number" name="yearly" id="ret-yearly" value="0" min="0">
                 </label>
             </div>
-            
+
             <div id="policy-result"></div>
-            
+
             <footer>
                 <button type="button" class="secondary" onclick="document.getElementById('policy-modal').close()">Cancel</button>
                 <button type="submit" id="create-policy-btn">
@@ -416,7 +416,7 @@ function setRetention(h, d, w, m, y) {
             <button aria-label="Close" rel="prev" onclick="document.getElementById('create-modal').close()"></button>
             <h3>Create ZFS Pool</h3>
         </header>
-        <form hx-post="/api/web/zfs/pools" 
+        <form hx-post="/api/web/zfs/pools"
               hx-target="#zfs-result"
               hx-disabled-elt="#create-pool-btn">
             <input type="hidden" name="devices" value="">
@@ -436,14 +436,14 @@ function setRetention(h, d, w, m, y) {
                     </select>
                 </label>
             </div>
-            
+
             <label>
                 Select Disks
                 <div id="zfs-disk-selector">
                     <span class="spinner"></span> Loading available disks...
                 </div>
             </label>
-            
+
             <details open>
                 <summary>Pool Options</summary>
                 <div class="grid">
@@ -472,14 +472,14 @@ function setRetention(h, d, w, m, y) {
                     <label><input type="checkbox" name="xattr_sa" checked> xattr in SA</label>
                 </fieldset>
             </details>
-            
+
             <details>
                 <summary>Advanced</summary>
                 <fieldset>
                     <label><input type="checkbox" name="force"> ⚠️ Force creation</label>
                 </fieldset>
             </details>
-            
+
             <div id="zfs-result"></div>
             <footer>
                 <button type="button" class="secondary" onclick="document.getElementById('create-modal').close()">Cancel</button>
@@ -515,7 +515,7 @@ function setRetention(h, d, w, m, y) {
             <button aria-label="Close" rel="prev" onclick="document.getElementById('create-dataset-modal').close()"></button>
             <h3>📁 Create Dataset</h3>
         </header>
-        <form hx-post="/api/web/zfs/datasets" 
+        <form hx-post="/api/web/zfs/datasets"
               hx-target="#dataset-result"
               hx-disabled-elt="#create-dataset-btn">
             <input type="hidden" name="pool" id="dataset-pool">
@@ -544,7 +544,7 @@ function setRetention(h, d, w, m, y) {
             <button aria-label="Close" rel="prev" onclick="document.getElementById('snapshot-modal').close()"></button>
             <h3>📸 Create Snapshot</h3>
         </header>
-        <form hx-post="/api/web/zfs/snapshots" 
+        <form hx-post="/api/web/zfs/snapshots"
               hx-target="#snapshot-result"
               hx-disabled-elt="#create-snapshot-btn">
             <input type="hidden" name="dataset" id="snapshot-dataset">
@@ -569,7 +569,7 @@ function setRetention(h, d, w, m, y) {
             <button aria-label="Close" rel="prev" onclick="document.getElementById('zfs-add-device-modal').close()"></button>
             <h3>💾 Add Device to <span id="add-device-pool-name"></span></h3>
         </header>
-        
+
         <div style="margin-bottom: 1rem;">
             <label>Operation Type</label>
             <select id="zfs-device-op-type" onchange="updateZfsDeviceForm()">
@@ -578,12 +578,15 @@ function setRetention(h, d, w, m, y) {
                 <option value="spare">Add Hot Spare</option>
                 <option value="cache">Add Cache (L2ARC)</option>
                 <option value="replace">Replace Device</option>
+                <option value="detach">Detach Device</option>
+                <option value="offline">Set Device Offline</option>
+                <option value="online">Set Device Online</option>
             </select>
         </div>
-        
+
         <!-- Add Vdev Form -->
-        <form id="zfs-add-vdev-form" 
-              hx-post="" 
+        <form id="zfs-add-vdev-form"
+              hx-post=""
               hx-target="#zfs-add-device-result"
               hx-swap="innerHTML"
               style="display: block;">
@@ -614,10 +617,10 @@ function setRetention(h, d, w, m, y) {
                 <button type="submit">Add Vdev</button>
             </footer>
         </form>
-        
+
         <!-- Add Spare Form -->
-        <form id="zfs-add-spare-form" 
-              hx-post="" 
+        <form id="zfs-add-spare-form"
+              hx-post=""
               hx-target="#zfs-add-device-result"
               hx-swap="innerHTML"
               style="display: none;">
@@ -633,10 +636,10 @@ function setRetention(h, d, w, m, y) {
                 <button type="submit">Add Spare</button>
             </footer>
         </form>
-        
+
         <!-- Add Cache Form -->
-        <form id="zfs-add-cache-form" 
-              hx-post="" 
+        <form id="zfs-add-cache-form"
+              hx-post=""
               hx-target="#zfs-add-device-result"
               hx-swap="innerHTML"
               style="display: none;">
@@ -652,10 +655,10 @@ function setRetention(h, d, w, m, y) {
                 <button type="submit">Add Cache</button>
             </footer>
         </form>
-        
+
         <!-- Attach Device Form -->
-        <form id="zfs-attach-form" 
-              hx-post="" 
+        <form id="zfs-attach-form"
+              hx-post=""
               hx-target="#zfs-add-device-result"
               hx-swap="innerHTML"
               style="display: none;">
@@ -681,10 +684,10 @@ function setRetention(h, d, w, m, y) {
                 <button type="submit">Attach Device</button>
             </footer>
         </form>
-        
+
         <!-- Replace Device Form -->
-        <form id="zfs-replace-form" 
-              hx-post="" 
+        <form id="zfs-replace-form"
+              hx-post=""
               hx-target="#zfs-add-device-result"
               hx-swap="innerHTML"
               style="display: none;">
@@ -711,7 +714,72 @@ function setRetention(h, d, w, m, y) {
                 <button type="submit">Replace Device</button>
             </footer>
         </form>
-        
+
+        <!-- Detach Device Form -->
+        <form id="zfs-detach-form"
+              hx-post=""
+              hx-target="#zfs-add-device-result"
+              hx-swap="innerHTML"
+              style="display: none;">
+            <label>
+                Device to Detach
+                <select name="device" id="zfs-detach-device" required>
+                    <option value="">Loading...</option>
+                </select>
+                <small>Detach a mirrored or replacing device</small>
+            </label>
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('zfs-add-device-modal').close()">Cancel</button>
+                <button type="submit">Detach Device</button>
+            </footer>
+        </form>
+
+        <!-- Offline Device Form -->
+        <form id="zfs-offline-form"
+              hx-post=""
+              hx-target="#zfs-add-device-result"
+              hx-swap="innerHTML"
+              style="display: none;">
+            <label>
+                Device to Offline
+                <select name="device" id="zfs-offline-device" required>
+                    <option value="">Loading...</option>
+                </select>
+                <small>Take a device offline for maintenance</small>
+            </label>
+            <label>
+                <input type="checkbox" name="temporary" value="true">
+                Temporary (bring back online after reboot)
+            </label>
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('zfs-add-device-modal').close()">Cancel</button>
+                <button type="submit">Set Offline</button>
+            </footer>
+        </form>
+
+        <!-- Online Device Form -->
+        <form id="zfs-online-form"
+              hx-post=""
+              hx-target="#zfs-add-device-result"
+              hx-swap="innerHTML"
+              style="display: none;">
+            <label>
+                Device to Online
+                <select name="device" id="zfs-online-device" required>
+                    <option value="">Loading...</option>
+                </select>
+                <small>Bring an offline device back online</small>
+            </label>
+            <label>
+                <input type="checkbox" name="expand" value="true">
+                Expand (use if device was replaced with larger one)
+            </label>
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('zfs-add-device-modal').close()">Cancel</button>
+                <button type="submit">Set Online</button>
+            </footer>
+        </form>
+
         <div id="zfs-add-device-result"></div>
     </article>
 </dialog>
@@ -727,7 +795,7 @@ function openCreateDatasetModal(poolName) {
     document.getElementById('dataset-pool').value = poolName;
     document.getElementById('dataset-preview').textContent = poolName + '/';
     document.getElementById('create-dataset-modal').showModal();
-    
+
     document.querySelector('#create-dataset-modal input[name="name"]').oninput = function() {
         document.getElementById('dataset-preview').textContent = poolName + '/' + this.value;
     };
@@ -737,7 +805,7 @@ function openSnapshotModal(datasetName) {
     document.getElementById('snapshot-dataset').value = datasetName;
     document.getElementById('snapshot-preview').textContent = datasetName + '@';
     document.getElementById('snapshot-modal').showModal();
-    
+
     document.querySelector('#snapshot-modal input[name="name"]').oninput = function() {
         document.getElementById('snapshot-preview').textContent = datasetName + '@' + this.value;
     };
@@ -758,7 +826,7 @@ function openZfsAddDeviceModal(poolName) {
 function loadZfsDeviceSelectors() {
     // Load available disks for vdev selector (checkboxes)
     htmx.ajax('GET', '/api/web/storage/available-disks', '#zfs-vdev-disk-selector');
-    
+
     // Load available disks for single-select dropdowns
     fetch('/api/web/storage/available-disks-select')
         .then(r => r.text())
@@ -768,18 +836,22 @@ function loadZfsDeviceSelectors() {
             document.getElementById('zfs-attach-new').innerHTML = html;
             document.getElementById('zfs-replace-new').innerHTML = html;
         });
-    
+
     // Load pool vdevs and devices
     fetch('/api/web/zfs/pools/' + currentZfsPool + '/vdevs')
         .then(r => r.text())
         .then(html => {
             document.getElementById('zfs-attach-existing').innerHTML = html;
         });
-    
+
+    // Load pool devices for replace/detach/offline/online
     fetch('/api/web/zfs/pools/' + currentZfsPool + '/devices')
         .then(r => r.text())
         .then(html => {
             document.getElementById('zfs-replace-old').innerHTML = html;
+            document.getElementById('zfs-detach-device').innerHTML = html;
+            document.getElementById('zfs-offline-device').innerHTML = html;
+            document.getElementById('zfs-online-device').innerHTML = html;
         });
 }
 
@@ -790,21 +862,27 @@ function updateZfsDeviceForm() {
         'spare': 'zfs-add-spare-form',
         'cache': 'zfs-add-cache-form',
         'attach': 'zfs-attach-form',
-        'replace': 'zfs-replace-form'
+        'replace': 'zfs-replace-form',
+        'detach': 'zfs-detach-form',
+        'offline': 'zfs-offline-form',
+        'online': 'zfs-online-form'
     };
     var endpoints = {
         'vdev': '/api/web/zfs/pools/' + currentZfsPool + '/add-vdev',
         'spare': '/api/web/zfs/pools/' + currentZfsPool + '/add-spare',
         'cache': '/api/web/zfs/pools/' + currentZfsPool + '/add-cache',
         'attach': '/api/web/zfs/pools/' + currentZfsPool + '/attach',
-        'replace': '/api/web/zfs/pools/' + currentZfsPool + '/replace'
+        'replace': '/api/web/zfs/pools/' + currentZfsPool + '/replace',
+        'detach': '/api/web/zfs/pools/' + currentZfsPool + '/detach',
+        'offline': '/api/web/zfs/pools/' + currentZfsPool + '/offline',
+        'online': '/api/web/zfs/pools/' + currentZfsPool + '/online'
     };
-    
+
     // Hide all forms
     Object.values(forms).forEach(function(formId) {
         document.getElementById(formId).style.display = 'none';
     });
-    
+
     // Show selected form and set endpoint
     var activeForm = document.getElementById(forms[opType]);
     activeForm.style.display = 'block';

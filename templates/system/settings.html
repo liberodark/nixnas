@@ -12,7 +12,7 @@
     <form hx-post="/api/web/settings/hostname" hx-target="#hostname-result" hx-swap="innerHTML">
         <label>
             Hostname
-            <input type="text" name="hostname" value="{{ hostname }}" 
+            <input type="text" name="hostname" value="{{ hostname }}"
                    pattern="[a-zA-Z0-9-]+" maxlength="63"
                    placeholder="nixnas" required>
             <small>Network name of this NAS (letters, numbers, hyphens only)</small>

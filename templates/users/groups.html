@@ -35,26 +35,26 @@
             <button aria-label="Close" rel="prev" onclick="document.getElementById('create-group-modal').close()"></button>
             <h3>👥 Create Group</h3>
         </header>
-        <form hx-post="/api/web/groups" 
-              hx-target="#groups-list" 
+        <form hx-post="/api/web/groups"
+              hx-target="#groups-list"
               hx-swap="innerHTML"
               hx-on::after-request="if(event.detail.successful) { document.getElementById('create-group-modal').close(); this.reset(); showToast('Group created'); }">
             <label>
                 Group Name *
                 <input type="text" name="name" required placeholder="developers">
             </label>
-            
+
             <label>
                 Description
                 <input type="text" name="description" placeholder="Development team">
             </label>
-            
+
             <label>
                 Members
                 <input type="text" name="members" placeholder="john jane admin">
                 <small>Space-separated usernames</small>
             </label>
-            
+
             <footer>
                 <button type="button" class="secondary" onclick="document.getElementById('create-group-modal').close()">Cancel</button>
                 <button type="submit">Create Group</button>

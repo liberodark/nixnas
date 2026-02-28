@@ -1,10 +1,10 @@
-<form hx-put="/api/web/smb/shares/{{ share.id }}" 
+<form hx-put="/api/web/smb/shares/{{ share.id }}"
       hx-target="#share-{{ share.id }}"
       hx-swap="outerHTML"
       hx-on::after-request="if(event.detail.successful) { document.getElementById('edit-modal').close(); showToast('Share updated'); }"
       style="max-height: 70vh; overflow-y: auto;">
     <input type="hidden" name="id" value="{{ share.id }}">
-    
+
     <div class="grid">
         <label>
             Name
@@ -15,12 +15,12 @@
             <input type="text" name="path" value="{{ share.path }}" required>
         </label>
     </div>
-    
+
     <label>
         Comment
         <input type="text" name="comment" value="{{ share.comment }}" placeholder="Share description">
     </label>
-    
+
     <fieldset>
         <legend>Access</legend>
         <div class="grid">
@@ -42,7 +42,7 @@
             </label>
         </div>
     </fieldset>
-    
+
     <fieldset>
         <legend>Users & Groups</legend>
         <label>
@@ -74,7 +74,7 @@
             </label>
         </div>
     </fieldset>
-    
+
     <fieldset>
         <legend>Host Access</legend>
         <label>
@@ -88,7 +88,7 @@
             <small>Space-separated IPs/hostnames</small>
         </label>
     </fieldset>
-    
+
     <fieldset>
         <legend>Permissions</legend>
         <div class="grid">
@@ -122,7 +122,7 @@
             </label>
         </div>
     </fieldset>
-    
+
     <fieldset>
         <legend>🗑️ Recycle Bin</legend>
         <label>
@@ -142,7 +142,7 @@
             </label>
         </div>
     </fieldset>
-    
+
     <fieldset>
         <legend>🔒 Security</legend>
         <label>
@@ -160,7 +160,7 @@
             <small>Log all file operations</small>
         </label>
     </fieldset>
-    
+
     <details>
         <summary>Advanced Options</summary>
         <fieldset>
@@ -176,7 +176,7 @@
                 </label>
             </div>
         </fieldset>
-        
+
         <fieldset>
             <legend>File Visibility</legend>
             <div class="grid">
@@ -190,7 +190,7 @@
                 </label>
             </div>
         </fieldset>
-        
+
         <fieldset>
             <legend>Symlinks</legend>
             <div class="grid">
@@ -204,7 +204,7 @@
                 </label>
             </div>
         </fieldset>
-        
+
         <fieldset>
             <legend>Special Features</legend>
             <label>
@@ -216,7 +216,7 @@
                 <input type="text" name="vfs_objects" value="{{ share.vfs_objects }}" placeholder="recycle full_audit">
             </label>
         </fieldset>
-        
+
         <fieldset>
             <legend>Extra Options</legend>
             <label>
@@ -225,7 +225,7 @@
             </label>
         </fieldset>
     </details>
-    
+
     <footer>
         <button type="button" class="secondary" onclick="document.getElementById('edit-modal').close()">Cancel</button>
         <button type="submit">Save Changes</button>

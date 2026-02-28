@@ -58,7 +58,7 @@
                 {% endif %}
             </div>
         </header>
-        
+
         <div class="compact-stats-grid">
             <div class="stat-card">
                 <div class="label">Temperature</div>
@@ -77,7 +77,7 @@
                 <div class="value">{{ disk.size_human }}</div>
             </div>
         </div>
-        
+
         <details>
             <summary>Disk Info</summary>
             <table>
@@ -86,7 +86,7 @@
                 <tr><td>Type</td><td>{% if disk.rotational %}HDD{% else %}SSD{% endif %}</td></tr>
             </table>
         </details>
-        
+
         <details>
             <summary>S.M.A.R.T. Attributes</summary>
             <div id="smart-details-{{ disk.name }}">
@@ -98,7 +98,7 @@
                 </button>
             </div>
         </details>
-        
+
         {% if !disk.is_virtual %}
         <details>
             <summary>⚙️ Monitoring Configuration</summary>
@@ -112,7 +112,7 @@
             </div>
         </details>
         {% endif %}
-        
+
         <footer>
             <div class="btn-group">
                 <button class="small outline"

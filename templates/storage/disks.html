@@ -7,7 +7,7 @@
 <header class="page-header">
     <h2>💾 Disks</h2>
     <div class="btn-group">
-        <button hx-post="/api/web/storage/scan" 
+        <button hx-post="/api/web/storage/scan"
                 hx-target="#scan-result"
                 hx-swap="innerHTML"
                 class="outline">
@@ -150,18 +150,18 @@
             <button aria-label="Close" rel="prev" onclick="document.getElementById('format-modal').close()"></button>
             <h3>📝 Format Disk</h3>
         </header>
-        <form hx-post="/api/web/storage/format" 
+        <form hx-post="/api/web/storage/format"
               hx-target="#format-result"
               hx-disabled-elt="#format-btn">
             <input type="hidden" name="device" id="format-device">
-            
+
             <div class="card" style="background: var(--pico-background-color); margin-bottom: 1rem;">
                 <p style="margin: 0;">
                     <strong>Device:</strong> <code id="format-device-display"></code><br>
                     <strong>Size:</strong> <span id="format-size-display"></span>
                 </p>
             </div>
-            
+
             <label>
                 Filesystem Type
                 <select name="fstype" required>
@@ -173,12 +173,12 @@
                     <option value="vfat">FAT32 (Legacy)</option>
                 </select>
             </label>
-            
+
             <label>
                 Label (optional)
                 <input type="text" name="label" placeholder="DATA" maxlength="16">
             </label>
-            
+
             <details>
                 <summary>Advanced Options</summary>
                 <fieldset>
@@ -188,15 +188,15 @@
                     </label>
                 </fieldset>
             </details>
-            
+
             <div class="card" style="background: #ef444420; border-color: #ef4444; margin-top: 1rem;">
                 <p style="margin: 0; color: #ef4444;">
                     ⚠️ <strong>Warning:</strong> Formatting will ERASE ALL DATA on this disk!
                 </p>
             </div>
-            
+
             <div id="format-result"></div>
-            
+
             <footer>
                 <button type="button" class="secondary" onclick="document.getElementById('format-modal').close()">Cancel</button>
                 <button type="submit" id="format-btn">
@@ -215,27 +215,27 @@
             <button aria-label="Close" rel="prev" onclick="document.getElementById('mount-modal').close()"></button>
             <h3>📂 Mount Filesystem</h3>
         </header>
-        <form hx-post="/api/web/storage/mount" 
+        <form hx-post="/api/web/storage/mount"
               hx-target="#mount-result"
               hx-disabled-elt="#mount-btn">
             <input type="hidden" name="device" id="mount-device">
             <input type="hidden" name="fstype" id="mount-fstype">
-            
+
             <div class="card" style="background: var(--pico-background-color); margin-bottom: 1rem;">
                 <p style="margin: 0;">
                     <strong>Device:</strong> <code id="mount-device-display"></code><br>
                     <strong>Filesystem:</strong> <span id="mount-fstype-display"></span>
                 </p>
             </div>
-            
+
             <label>
                 Mount Point
                 <input type="text" name="mountpoint" required placeholder="/mnt/data">
                 <small>Directory will be created if it doesn't exist</small>
             </label>
-            
+
             <div id="mount-result"></div>
-            
+
             <footer>
                 <button type="button" class="secondary" onclick="document.getElementById('mount-modal').close()">Cancel</button>
                 <button type="submit" id="mount-btn">
@@ -254,26 +254,26 @@
             <button aria-label="Close" rel="prev" onclick="document.getElementById('umount-modal').close()"></button>
             <h3>⏏️ Unmount Filesystem</h3>
         </header>
-        <form hx-post="/api/web/storage/umount" 
+        <form hx-post="/api/web/storage/umount"
               hx-target="#umount-result"
               hx-disabled-elt="#umount-btn">
             <input type="hidden" name="mountpoint" id="umount-mountpoint">
-            
+
             <div class="card" style="background: var(--pico-background-color); margin-bottom: 1rem;">
                 <p style="margin: 0;">
                     <strong>Mount Point:</strong> <code id="umount-mountpoint-display"></code>
                 </p>
             </div>
-            
+
             <fieldset>
                 <label>
                     <input type="checkbox" name="force">
                     Force unmount (lazy unmount if busy)
                 </label>
             </fieldset>
-            
+
             <div id="umount-result"></div>
-            
+
             <footer>
                 <button type="button" class="secondary" onclick="document.getElementById('umount-modal').close()">Cancel</button>
                 <button type="submit" id="umount-btn">
@@ -321,7 +321,7 @@ function openSlotModal(diskId, diskName, currentSlot, currentLabel) {
 
 function removeSlot() {
     var diskId = document.getElementById('slot-disk-id').value;
-    
+
     fetch('/api/web/storage/disk-slot/remove', {
         method: 'POST',
         headers: {
@@ -346,21 +346,21 @@ var disksSortDir = {};
 function sortDisksTable(colIndex, type) {
     var tbody = document.getElementById('disks-tbody');
     var rows = Array.from(tbody.querySelectorAll('tr'));
-    
+
     // Toggle direction
     disksSortDir[colIndex] = !disksSortDir[colIndex];
     var asc = disksSortDir[colIndex];
-    
+
     // Extract number from slot string (handles "1", "Bay 1", "HDD 1", etc.)
     function extractSlotNumber(str) {
         if (!str || str === '') return 9999;
         var match = str.match(/(\d+)/);
         return match ? parseInt(match[1]) : 9999;
     }
-    
+
     rows.sort(function(a, b) {
         var aVal, bVal;
-        
+
         if (colIndex === 0) {
             // Slot - extract number from any format
             var aNum = extractSlotNumber(a.dataset.slot);
@@ -374,7 +374,7 @@ function sortDisksTable(colIndex, type) {
         }
         return 0;
     });
-    
+
     rows.forEach(function(row) {
         tbody.appendChild(row);
     });
@@ -393,23 +393,23 @@ function sortDisksTable(colIndex, type) {
               hx-swap="innerHTML"
               hx-on::after-request="if(event.detail.successful && event.detail.xhr.status === 200) setTimeout(() => location.reload(), 500)">
             <input type="hidden" name="disk_id" id="slot-disk-id">
-            
+
             <p>Disk: <strong><code id="slot-disk-name"></code></strong></p>
-            
+
             <label>
                 Slot Number
                 <input type="text" name="slot" id="slot-number" placeholder="e.g., 1, A1, Bay 1" required>
                 <small>Physical position in your server/enclosure</small>
             </label>
-            
+
             <label>
                 Label (optional)
                 <input type="text" name="label" id="slot-label" placeholder="e.g., Top left, Backplane 1">
                 <small>Additional description to help identify the disk</small>
             </label>
-            
+
             <div id="slot-result"></div>
-            
+
             <footer>
                 <button type="button" class="secondary" onclick="document.getElementById('slot-modal').close()">Cancel</button>
                 <button type="button" class="outline secondary" id="slot-remove-btn"

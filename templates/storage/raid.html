@@ -52,9 +52,9 @@
                 </button>
             </div>
         </header>
-        
+
         <div id="array-actions-{{ array.id }}"></div>
-        
+
         <div class="stats-grid">
             <div class="stat-card">
                 <div class="label">Level</div>
@@ -69,7 +69,7 @@
                 <div class="value">{{ array.size_human }}</div>
             </div>
         </div>
-        
+
         <details>
             <summary>Devices ({{ array.devices.len() }})</summary>
             <table>
@@ -109,7 +109,7 @@
             <button aria-label="Close" rel="prev" onclick="document.getElementById('create-modal').close()"></button>
             <h3>Create RAID Array</h3>
         </header>
-        <form hx-post="/api/web/mdadm/arrays" 
+        <form hx-post="/api/web/mdadm/arrays"
               hx-target="#raid-result"
               hx-disabled-elt="#create-array-btn">
             <input type="hidden" name="devices" value="">
@@ -153,7 +153,7 @@
             <button aria-label="Close" rel="prev" onclick="document.getElementById('mdadm-add-device-modal').close()"></button>
             <h3>💾 Add Device to <span id="mdadm-array-name"></span></h3>
         </header>
-        
+
         <div style="margin-bottom: 1rem;">
             <label>Operation Type</label>
             <select id="mdadm-op-type" onchange="updateMdadmForm()">
@@ -161,10 +161,10 @@
                 <option value="grow">Grow Array (use added devices)</option>
             </select>
         </div>
-        
+
         <!-- Add Device Form -->
-        <form id="mdadm-add-form" 
-              hx-post="" 
+        <form id="mdadm-add-form"
+              hx-post=""
               hx-target="#mdadm-add-result"
               hx-swap="innerHTML"
               style="display: block;">
@@ -180,10 +180,10 @@
                 <button type="submit">Add Device</button>
             </footer>
         </form>
-        
+
         <!-- Grow Form -->
-        <form id="mdadm-grow-form" 
-              hx-post="" 
+        <form id="mdadm-grow-form"
+              hx-post=""
               hx-target="#mdadm-add-result"
               hx-swap="innerHTML"
               style="display: none;">
@@ -197,7 +197,7 @@
                 <button type="submit">Grow Array</button>
             </footer>
         </form>
-        
+
         <div id="mdadm-add-result"></div>
     </article>
 </dialog>
@@ -214,14 +214,14 @@ function openMdadmAddDeviceModal(arrayName, deviceCount) {
     document.getElementById('mdadm-new-count').value = deviceCount + 1;
     document.getElementById('mdadm-op-type').value = 'add';
     document.getElementById('mdadm-add-result').innerHTML = '';
-    
+
     // Load available disks
     fetch('/api/web/storage/available-disks-select')
         .then(r => r.text())
         .then(html => {
             document.getElementById('mdadm-add-device-select').innerHTML = html;
         });
-    
+
     updateMdadmForm();
     document.getElementById('mdadm-add-device-modal').showModal();
 }
@@ -229,10 +229,10 @@ function openMdadmAddDeviceModal(arrayName, deviceCount) {
 function updateMdadmForm() {
     var opType = document.getElementById('mdadm-op-type').value;
     var arrayId = currentMdadmArray.replace('/dev/', '');
-    
+
     var addForm = document.getElementById('mdadm-add-form');
     var growForm = document.getElementById('mdadm-grow-form');
-    
+
     if (opType === 'add') {
         addForm.style.display = 'block';
         growForm.style.display = 'none';
