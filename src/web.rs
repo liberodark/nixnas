@@ -1741,9 +1741,16 @@ struct AvailableDisk {
     model: String,
 }
 
-async fn available_disks(State(_state): State<Arc<WebState>>) -> impl IntoResponse {
+async fn available_disks(State(state): State<Arc<WebState>>) -> impl IntoResponse {
     let block_devices = filesystem::list_block_devices().await.unwrap_or_default();
-    let by_id_map = filesystem::get_disk_by_id_map().await.unwrap_or_default();
+    let zfs_settings = state.state_manager.get().await.zfs_settings;
+    let use_by_path = zfs_settings
+        .dev_nodes
+        .as_ref()
+        .is_some_and(|p| p.contains("by-path"));
+    let stable_path_map = filesystem::get_disk_stable_path_map(use_by_path)
+        .await
+        .unwrap_or_default();
 
     let zfs_devices = zfs::get_all_pool_devices().await;
 
@@ -1760,28 +1767,25 @@ async fn available_disks(State(_state): State<Arc<WebState>>) -> impl IntoRespon
             if !d.children.iter().all(|c| c.mountpoint.is_none()) {
                 return false;
             }
-            let by_id = by_id_map.get(&d.name).cloned().unwrap_or_default();
+            let stable_path = stable_path_map.get(&d.name).cloned().unwrap_or_default();
             let is_in_zfs = zfs_devices.iter().any(|zd| {
                 zd == &d.name
                     || zd == &d.path
-                    || zd == &by_id
-                    || by_id.ends_with(zd)
+                    || zd == &stable_path
+                    || stable_path.ends_with(zd)
                     || zd.ends_with(&d.name)
             });
             !is_in_zfs
         })
-        .map(|d| {
-            let by_id = by_id_map
-                .get(&d.name)
-                .cloned()
-                .unwrap_or_else(|| d.path.clone());
-            AvailableDisk {
+        .filter_map(|d| {
+            let by_id = stable_path_map.get(&d.name).cloned()?;
+            Some(AvailableDisk {
                 path: d.path.clone(),
                 by_id,
                 name: d.name.clone(),
                 size_human: format_bytes(d.size),
                 model: opt_to_string(&d.model),
-            }
+            })
         })
         .collect();
 
@@ -1789,9 +1793,16 @@ async fn available_disks(State(_state): State<Arc<WebState>>) -> impl IntoRespon
 }
 
 /// Returns available disks as <select> options
-async fn available_disks_select(State(_state): State<Arc<WebState>>) -> impl IntoResponse {
+async fn available_disks_select(State(state): State<Arc<WebState>>) -> impl IntoResponse {
     let block_devices = filesystem::list_block_devices().await.unwrap_or_default();
-    let by_id_map = filesystem::get_disk_by_id_map().await.unwrap_or_default();
+    let zfs_settings = state.state_manager.get().await.zfs_settings;
+    let use_by_path = zfs_settings
+        .dev_nodes
+        .as_ref()
+        .is_some_and(|p| p.contains("by-path"));
+    let stable_path_map = filesystem::get_disk_stable_path_map(use_by_path)
+        .await
+        .unwrap_or_default();
 
     let zfs_devices = zfs::get_all_pool_devices().await;
 
@@ -1807,30 +1818,33 @@ async fn available_disks_select(State(_state): State<Arc<WebState>>) -> impl Int
             if !d.children.iter().all(|c| c.mountpoint.is_none()) {
                 return false;
             }
-            let by_id = by_id_map.get(&d.name).cloned().unwrap_or_default();
+            let stable_path = stable_path_map.get(&d.name).cloned().unwrap_or_default();
             let is_in_zfs = zfs_devices.iter().any(|zd| {
                 zd == &d.name
                     || zd == &d.path
-                    || zd == &by_id
-                    || by_id.ends_with(zd)
+                    || zd == &stable_path
+                    || stable_path.ends_with(zd)
                     || zd.ends_with(&d.name)
             });
             !is_in_zfs
         })
-        .map(|d| {
-            let by_id = by_id_map
-                .get(&d.name)
-                .cloned()
-                .unwrap_or_else(|| d.path.clone());
-            AvailableDisk {
+        .filter_map(|d| {
+            let by_id = stable_path_map.get(&d.name).cloned()?;
+            Some(AvailableDisk {
                 path: d.path.clone(),
                 by_id,
                 name: d.name.clone(),
                 size_human: format_bytes(d.size),
                 model: opt_to_string(&d.model),
-            }
+            })
         })
         .collect();
+
+    if disks.is_empty() {
+        return Html(
+            "<option value=\"\">No disks available (try Scan on Disks page)</option>".to_string(),
+        );
+    }
 
     let mut html = String::from("<option value=\"\">-- Select a disk --</option>");
     for disk in disks {

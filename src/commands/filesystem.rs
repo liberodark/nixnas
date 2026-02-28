@@ -416,6 +416,48 @@ pub async fn get_disk_by_id_map() -> CmdResult<std::collections::HashMap<String,
     Ok(map)
 }
 
+/// Get disk path map from /dev/disk/by-path (for VMs without serial numbers)
+pub async fn get_disk_by_path_map() -> CmdResult<std::collections::HashMap<String, String>> {
+    use std::collections::HashMap;
+
+    let mut map = HashMap::new();
+    let by_path_dir = std::path::Path::new("/dev/disk/by-path");
+
+    if let Ok(entries) = std::fs::read_dir(by_path_dir) {
+        for entry in entries.flatten() {
+            let link_name = entry.file_name().to_string_lossy().to_string();
+
+            // Skip partition links
+            if link_name.contains("-part") {
+                continue;
+            }
+
+            if let Ok(target) = std::fs::read_link(entry.path())
+                && let Some(device_name) = target.file_name()
+            {
+                let device = device_name.to_string_lossy().to_string();
+                let by_path = format!("/dev/disk/by-path/{}", link_name);
+
+                // Keep first match (most specific path)
+                map.entry(device).or_insert(by_path);
+            }
+        }
+    }
+
+    Ok(map)
+}
+
+/// Get disk stable path map based on preference (by-id or by-path)
+pub async fn get_disk_stable_path_map(
+    use_by_path: bool,
+) -> CmdResult<std::collections::HashMap<String, String>> {
+    if use_by_path {
+        get_disk_by_path_map().await
+    } else {
+        get_disk_by_id_map().await
+    }
+}
+
 /// List all block devices with by-id paths
 #[allow(dead_code)]
 pub async fn list_disks_with_by_id() -> CmdResult<Vec<DiskById>> {
