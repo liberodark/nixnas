@@ -420,24 +420,31 @@ button.small,
 }
 
 .smart-badge.smart-ok,
+.device-badge.smart-ok,
 .smart-ok {
     background: #22c55e;
     color: white;
 }
 
 .smart-badge.smart-warning,
-.smart-warn {
+.device-badge.smart-warning,
+.smart-warn,
+.smart-warning {
     background: #f59e0b;
     color: white;
 }
 
 .smart-badge.smart-failed,
-.smart-fail {
+.device-badge.smart-failed,
+.smart-fail,
+.smart-failed {
     background: #ef4444;
     color: white;
 }
 
-.smart-badge.smart-unknown {
+.smart-badge.smart-unknown,
+.device-badge.smart-unknown,
+.smart-unknown {
     background: var(--pico-muted-border-color);
     color: var(--pico-color);
 }
