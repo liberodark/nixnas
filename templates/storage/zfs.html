@@ -179,6 +179,10 @@ networking.hostId = "$(head -c 8 /etc/machine-id)";</code></pre>
                                 </button>
                                 {% endif %}
                                 {% if ds.name != pool.name %}
+                                <button class="small outline"
+                                        onclick="openRenameModal('{{ ds.name }}')">
+                                    ✏️
+                                </button>
                                 <button class="small outline secondary"
                                         hx-delete="/api/web/zfs/datasets/delete/{{ ds.name }}"
                                         hx-swap="outerHTML"
@@ -580,6 +584,42 @@ function setRetention(h, d, w, m, y) {
     </article>
 </dialog>
 
+<!-- Rename Dataset Modal -->
+<dialog id="rename-modal">
+    <article style="max-width: 500px;">
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('rename-modal').close()"></button>
+            <h3>✏️ Rename Dataset</h3>
+        </header>
+        <form id="rename-form"
+              hx-target="#rename-result"
+              hx-disabled-elt="#rename-btn">
+            <label>
+                Current Name
+                <input type="text" id="rename-current" disabled>
+            </label>
+            <label>
+                New Name
+                <input type="text" name="new_name" id="rename-new-name" required placeholder="pool/new-name">
+                <small>Must be a valid ZFS dataset path</small>
+            </label>
+            <label>
+                <input type="checkbox" name="force" value="true">
+                Force unmount if necessary
+            </label>
+            <label>
+                <input type="checkbox" name="create_parents" value="true">
+                Create parent datasets if needed
+            </label>
+            <div id="rename-result"></div>
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('rename-modal').close()">Cancel</button>
+                <button type="submit" id="rename-btn">Rename</button>
+            </footer>
+        </form>
+    </article>
+</dialog>
+
 <!-- ZFS Add Device Modal -->
 <dialog id="zfs-add-device-modal">
     <article>
@@ -827,6 +867,16 @@ function openSnapshotModal(datasetName) {
     document.querySelector('#snapshot-modal input[name="name"]').oninput = function() {
         document.getElementById('snapshot-preview').textContent = datasetName + '@' + this.value;
     };
+}
+
+function openRenameModal(datasetName) {
+    document.getElementById('rename-current').value = datasetName;
+    document.getElementById('rename-new-name').value = datasetName;
+    document.getElementById('rename-result').innerHTML = '';
+    var form = document.getElementById('rename-form');
+    form.setAttribute('hx-post', '/api/web/zfs/datasets/rename/' + datasetName);
+    htmx.process(form);
+    document.getElementById('rename-modal').showModal();
 }
 
 var currentZfsPool = '';

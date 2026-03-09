@@ -197,6 +197,15 @@ aside.sidebar .section-title {
     color: white;
 }
 
+.sidebar-version {
+    display: block;
+    text-align: center;
+    color: var(--pico-muted-color);
+    font-size: 0.75rem;
+    margin-top: 0.5rem;
+    opacity: 0.6;
+}
+
 /* ============================================
    Main Content Area
    ============================================ */

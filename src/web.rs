@@ -693,6 +693,7 @@ pub fn build_web_router(state: Arc<WebState>) -> Router {
         .route("/api/web/metrics/history", get(metrics_history))
         .route("/api/web/settings/hostname", post(update_hostname))
         .route("/api/web/settings/password", post(change_password))
+        .route("/api/web/version", get(get_version))
         .route("/api/web/notifications/smtp", post(update_smtp_settings))
         .route(
             "/api/web/notifications/events",
@@ -800,6 +801,10 @@ pub fn build_web_router(state: Arc<WebState>) -> Router {
         .route(
             "/api/web/zfs/datasets/rewrite/{*name}",
             post(rewrite_zfs_dataset),
+        )
+        .route(
+            "/api/web/zfs/datasets/rename/{*name}",
+            post(rename_zfs_dataset),
         )
         .route(
             "/api/web/storage/available-disks-select",
@@ -917,6 +922,10 @@ async fn settings_page(State(state): State<Arc<WebState>>) -> impl IntoResponse 
         active_page: "settings".to_string(),
         hostname: settings.hostname,
     })
+}
+
+async fn get_version() -> Html<String> {
+    Html(format!("v{}", env!("CARGO_PKG_VERSION")))
 }
 
 #[derive(Deserialize)]
@@ -2120,6 +2129,45 @@ async fn rewrite_zfs_dataset(Path(name): Path<String>) -> impl IntoResponse {
         ),
         error: String::new(),
     })
+}
+
+#[derive(Deserialize)]
+struct RenameDatasetForm {
+    new_name: String,
+    #[serde(default)]
+    force: Option<String>,
+    #[serde(default)]
+    create_parents: Option<String>,
+}
+
+async fn rename_zfs_dataset(
+    Path(name): Path<String>,
+    Form(form): Form<RenameDatasetForm>,
+) -> impl IntoResponse {
+    let name = name.strip_prefix('/').unwrap_or(&name);
+    let decoded_name = urlencoding::decode(name).unwrap_or_else(|_| name.to_string().into());
+
+    let options = zfs::RenameOptions {
+        force_unmount: form.force.is_some(),
+        create_parents: form.create_parents.is_some(),
+        no_unmount: false,
+        recursive: false,
+    };
+
+    match zfs::rename(&decoded_name, &form.new_name, &options).await {
+        Ok(_) => HtmlTemplate(BuildOutputTemplate {
+            success: true,
+            title: format!("Renamed '{}' to '{}'", decoded_name, form.new_name),
+            output: "Refresh the page to see the updated name.".to_string(),
+            error: String::new(),
+        }),
+        Err(e) => HtmlTemplate(BuildOutputTemplate {
+            success: false,
+            title: "Rename Failed".to_string(),
+            output: String::new(),
+            error: e.to_string(),
+        }),
+    }
 }
 
 async fn smart_page(State(state): State<Arc<WebState>>) -> impl IntoResponse {

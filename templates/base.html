@@ -79,13 +79,17 @@
             </div>
             <ul class="nav-category-items">
                 <li><a href="/system" {% if active_page == "system" %}class="active"{% endif %}>Configuration</a></li>
-                <li><a href="/system/notifications" {% if active_page == "notifications" %}class="active"{% endif %}>📧 Notifications</a></li>
+                <li><a href="/system/notifications" {% if active_page == "notifications" %}class="active"{% endif %}>Notifications</a></li>
                 <li><a href="/settings" {% if active_page == "settings" %}class="active"{% endif %}>Settings</a></li>
             </ul>
         </div>
 
         <div class="sidebar-footer">
             <a href="/logout" class="logout-btn">🚪 Logout</a>
+            <small class="sidebar-version"
+                   hx-get="/api/web/version"
+                   hx-trigger="load"
+                   hx-swap="innerHTML"></small>
         </div>
     </aside>
 

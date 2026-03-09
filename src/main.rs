@@ -1,3 +1,4 @@
+use clap::Parser;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
@@ -18,10 +19,37 @@ use services::monitoring::MonitoringService;
 use services::smart_cache::SmartCache;
 use web::{WebState, build_web_router};
 
-/// Default paths.
-const DEFAULT_STATE_PATH: &str = "/var/lib/nixnas/state.json";
-const DEFAULT_NIX_OUTPUT_DIR: &str = "/etc/nixos";
-const DEFAULT_LISTEN_ADDR: &str = "0.0.0.0:8080";
+/// NixOS NAS management daemon with web interface.
+#[derive(Parser)]
+#[command(version, about)]
+struct Cli {
+    /// Listen address (ip:port)
+    #[arg(
+        short,
+        long,
+        env = "NIXNAS_LISTEN_ADDR",
+        default_value = "0.0.0.0:8080"
+    )]
+    listen: String,
+
+    /// Path to state file
+    #[arg(
+        short,
+        long,
+        env = "NIXNAS_STATE_PATH",
+        default_value = "/var/lib/nixnas/state.json"
+    )]
+    state_path: String,
+
+    /// Directory for generated Nix configuration files
+    #[arg(
+        short,
+        long,
+        env = "NIXNAS_NIX_OUTPUT_DIR",
+        default_value = "/etc/nixos"
+    )]
+    output_dir: String,
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -33,21 +61,16 @@ async fn main() -> anyhow::Result<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    tracing::info!("Starting NixNAS daemon...");
+    let cli = Cli::parse();
 
-    let state_path =
-        std::env::var("NIXNAS_STATE_PATH").unwrap_or_else(|_| DEFAULT_STATE_PATH.to_string());
-    let nix_output_dir = std::env::var("NIXNAS_NIX_OUTPUT_DIR")
-        .unwrap_or_else(|_| DEFAULT_NIX_OUTPUT_DIR.to_string());
-    let listen_addr =
-        std::env::var("NIXNAS_LISTEN_ADDR").unwrap_or_else(|_| DEFAULT_LISTEN_ADDR.to_string());
+    tracing::info!("Starting NixNAS daemon v{}...", env!("CARGO_PKG_VERSION"));
 
-    if let Some(parent) = std::path::Path::new(&state_path).parent() {
+    if let Some(parent) = std::path::Path::new(&cli.state_path).parent() {
         tokio::fs::create_dir_all(parent).await?;
     }
 
     let app_state = Arc::new(
-        AppState::new(&state_path, &nix_output_dir)
+        AppState::new(&cli.state_path, &cli.output_dir)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to initialize state: {}", e))?,
     );
@@ -84,7 +107,7 @@ async fn main() -> anyhow::Result<()> {
 
     let app = web_router.merge(api_router);
 
-    let addr: SocketAddr = listen_addr.parse()?;
+    let addr: SocketAddr = cli.listen.parse()?;
     tracing::info!("Listening on http://{}", addr);
     tracing::info!("Web UI: http://{}/", addr);
     tracing::info!("API: http://{}/api/rpc", addr);

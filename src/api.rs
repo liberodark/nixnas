@@ -445,6 +445,22 @@ async fn dispatch_zfs(method: &str, params: &Value) -> RpcResult<Value> {
             zfs::rewrite(&path, &options).await?;
             Ok(Value::Bool(true))
         }
+        "rename" => {
+            let source: String = extract_param(params, "source")?;
+            let target: String = extract_param(params, "target")?;
+            let force_unmount: bool = extract_param_opt(params, "force_unmount").unwrap_or(false);
+            let create_parents: bool = extract_param_opt(params, "create_parents").unwrap_or(false);
+            let no_unmount: bool = extract_param_opt(params, "no_unmount").unwrap_or(false);
+            let recursive: bool = extract_param_opt(params, "recursive").unwrap_or(false);
+            let options = zfs::RenameOptions {
+                force_unmount,
+                create_parents,
+                no_unmount,
+                recursive,
+            };
+            zfs::rename(&source, &target, &options).await?;
+            Ok(Value::Bool(true))
+        }
         "upgrade_pool" => {
             let name: String = extract_param(params, "name")?;
             let output = zfs::upgrade_pool(&name).await?;

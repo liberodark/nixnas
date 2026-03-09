@@ -780,6 +780,43 @@ pub async fn rewrite(path: &str, options: &RewriteOptions) -> CmdResult<()> {
     Ok(())
 }
 
+/// Options for ZFS rename operation.
+#[derive(Debug, Clone, Default)]
+pub struct RenameOptions {
+    /// Force unmount if needed.
+    pub force_unmount: bool,
+    /// Create parent datasets as necessary.
+    pub create_parents: bool,
+    /// Do not remount filesystem after rename.
+    pub no_unmount: bool,
+    /// Recursively rename snapshots of all descendent datasets.
+    pub recursive: bool,
+}
+
+/// Rename a dataset, volume, or snapshot.
+pub async fn rename(source: &str, target: &str, options: &RenameOptions) -> CmdResult<()> {
+    let mut args = vec!["rename"];
+
+    if options.force_unmount {
+        args.push("-f");
+    }
+    if options.create_parents {
+        args.push("-p");
+    }
+    if options.no_unmount {
+        args.push("-u");
+    }
+    if options.recursive {
+        args.push("-r");
+    }
+
+    args.push(source);
+    args.push(target);
+
+    run_ok("zfs", &args).await?;
+    Ok(())
+}
+
 /// Get the raw output of `zpool upgrade` showing upgradable pools.
 pub async fn upgrade_status() -> CmdResult<String> {
     // `zpool upgrade` may return exit code 0 even when no upgrades are needed,
