@@ -427,6 +427,37 @@ async fn dispatch_zfs(method: &str, params: &Value) -> RpcResult<Value> {
             zfs::rollback(&name, force).await?;
             Ok(Value::Bool(true))
         }
+        "rewrite" => {
+            let path: String = extract_param(params, "path")?;
+            let recursive: bool = extract_param_opt(params, "recursive").unwrap_or(true);
+            let verbose: bool = extract_param_opt(params, "verbose").unwrap_or(false);
+            let single_filesystem: bool =
+                extract_param_opt(params, "single_filesystem").unwrap_or(true);
+            let offset: Option<u64> = extract_param_opt(params, "offset");
+            let length: Option<u64> = extract_param_opt(params, "length");
+            let options = zfs::RewriteOptions {
+                recursive,
+                verbose,
+                single_filesystem,
+                offset,
+                length,
+            };
+            zfs::rewrite(&path, &options).await?;
+            Ok(Value::Bool(true))
+        }
+        "upgrade_pool" => {
+            let name: String = extract_param(params, "name")?;
+            let output = zfs::upgrade_pool(&name).await?;
+            Ok(Value::String(output))
+        }
+        "upgrade_all" => {
+            let output = zfs::upgrade_all_pools().await?;
+            Ok(Value::String(output))
+        }
+        "upgrade_status" => {
+            let output = zfs::upgrade_status().await?;
+            Ok(Value::String(output))
+        }
         _ => Err(RpcError::MethodNotFound(method.to_string())),
     }
 }

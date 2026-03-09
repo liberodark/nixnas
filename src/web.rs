@@ -198,6 +198,7 @@ struct SmartTemplate {
 struct ZfsTemplate {
     active_page: String,
     zfs_available: bool,
+    has_upgradable_pools: bool,
     pools: Vec<PoolInfo>,
 }
 
@@ -791,6 +792,15 @@ pub fn build_web_router(state: Arc<WebState>) -> Router {
         .route("/api/web/zfs/pools/{name}/status", get(zfs_pool_status_raw))
         .route("/api/web/zfs/pools/{name}/vdevs", get(zfs_pool_vdevs))
         .route("/api/web/zfs/pools/{name}/devices", get(zfs_pool_devices))
+        .route(
+            "/api/web/zfs/pools/{name}/upgrade",
+            post(upgrade_zfs_pool_handler),
+        )
+        .route("/api/web/zfs/upgrade-status", get(zfs_upgrade_status))
+        .route(
+            "/api/web/zfs/datasets/rewrite/{*name}",
+            post(rewrite_zfs_dataset),
+        )
         .route(
             "/api/web/storage/available-disks-select",
             get(available_disks_select),
@@ -2023,6 +2033,95 @@ async fn zfs_clear_errors(Path(name): Path<String>) -> impl IntoResponse {
     }
 }
 
+async fn upgrade_zfs_pool_handler(Path(name): Path<String>) -> impl IntoResponse {
+    match zfs::upgrade_pool(&name).await {
+        Ok(output) => HtmlTemplate(BuildOutputTemplate {
+            success: true,
+            title: format!("Pool '{}' upgraded", name),
+            output,
+            error: String::new(),
+        }),
+        Err(e) => HtmlTemplate(BuildOutputTemplate {
+            success: false,
+            title: format!("Upgrade pool '{}' failed", name),
+            output: String::new(),
+            error: e.to_string(),
+        }),
+    }
+}
+
+async fn zfs_upgrade_status() -> impl IntoResponse {
+    match zfs::upgrade_status().await {
+        Ok(output) => Html(format!(
+            r#"<pre style="white-space: pre-wrap;">{}</pre>"#,
+            output
+        ))
+        .into_response(),
+        Err(e) => Html(format!(
+            r#"<p style="color: var(--pico-del-color);">Error: {}</p>"#,
+            e
+        ))
+        .into_response(),
+    }
+}
+
+async fn rewrite_zfs_dataset(Path(name): Path<String>) -> impl IntoResponse {
+    let name = name.strip_prefix('/').unwrap_or(&name);
+    let decoded_name = urlencoding::decode(name).unwrap_or_else(|_| name.to_string().into());
+
+    // Look up the dataset mountpoint
+    let mountpoint = match zfs::get_dataset(&decoded_name).await {
+        Ok(ds) => match ds.mountpoint {
+            Some(mp) => mp,
+            None => {
+                return HtmlTemplate(BuildOutputTemplate {
+                    success: false,
+                    title: "Rewrite Failed".to_string(),
+                    output: String::new(),
+                    error: format!("Dataset '{}' has no mountpoint", decoded_name),
+                });
+            }
+        },
+        Err(e) => {
+            return HtmlTemplate(BuildOutputTemplate {
+                success: false,
+                title: "Rewrite Failed".to_string(),
+                output: String::new(),
+                error: e.to_string(),
+            });
+        }
+    };
+
+    let dataset_name = decoded_name.to_string();
+    let mp = mountpoint.clone();
+
+    // Spawn rewrite in background since it can take a long time
+    tokio::spawn(async move {
+        let options = zfs::RewriteOptions {
+            recursive: true,
+            verbose: false,
+            single_filesystem: true,
+            offset: None,
+            length: None,
+        };
+        if let Err(e) = zfs::rewrite(&mp, &options).await {
+            tracing::error!("Rewrite failed for dataset '{}': {}", dataset_name, e);
+        } else {
+            tracing::info!("Rewrite completed for dataset '{}'", dataset_name);
+        }
+    });
+
+    HtmlTemplate(BuildOutputTemplate {
+        success: true,
+        title: format!("Rewrite started for '{}'", decoded_name),
+        output: format!(
+            "Rewriting data blocks at {} (recursive). This runs in the background and may take a long time.",
+            mountpoint
+        ),
+        error: String::new(),
+    })
+}
+
 async fn smart_page(State(state): State<Arc<WebState>>) -> impl IntoResponse {
     let smart_available = smart::is_available().await;
     let settings = state.state_manager.get_settings().await;
@@ -2962,9 +3061,16 @@ async fn zfs_page(State(_state): State<Arc<WebState>>) -> impl IntoResponse {
         vec![]
     };
 
+    let has_upgradable_pools = if zfs_available {
+        zfs::has_upgradable_pools().await
+    } else {
+        false
+    };
+
     HtmlTemplate(ZfsTemplate {
         active_page: "zfs".to_string(),
         zfs_available,
+        has_upgradable_pools,
         pools,
     })
 }

@@ -77,6 +77,15 @@ networking.hostId = "$(head -c 8 /etc/machine-id)";</code></pre>
                         onclick="openPropertiesModal('{{ pool.name }}')">
                     ⚙️ Properties
                 </button>
+                {% if has_upgradable_pools %}
+                <button class="small outline"
+                        hx-post="/api/web/zfs/pools/{{ pool.name }}/upgrade"
+                        hx-target="#pool-actions-{{ pool.name }}"
+                        hx-swap="innerHTML"
+                        hx-confirm="Upgrade pool '{{ pool.name }}' feature flags to latest version?">
+                    ⬆️ Upgrade
+                </button>
+                {% endif %}
                 <button class="small outline secondary"
                         hx-post="/api/web/zfs/pools/{{ pool.name }}/export"
                         hx-target="#pool-{{ pool.name }}"
@@ -160,6 +169,15 @@ networking.hostId = "$(head -c 8 /etc/machine-id)";</code></pre>
                                         onclick="openSnapshotModal('{{ ds.name }}')">
                                     📸
                                 </button>
+                                {% if ds.mountpoint != "" %}
+                                <button class="small outline"
+                                        hx-post="/api/web/zfs/datasets/rewrite/{{ ds.name }}"
+                                        hx-target="#pool-actions-{{ pool.name }}"
+                                        hx-swap="innerHTML"
+                                        hx-confirm="Rewrite all data blocks in '{{ ds.name }}'? This can take a long time on large datasets.">
+                                    🔄
+                                </button>
+                                {% endif %}
                                 {% if ds.name != pool.name %}
                                 <button class="small outline secondary"
                                         hx-delete="/api/web/zfs/datasets/delete/{{ ds.name }}"

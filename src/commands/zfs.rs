@@ -735,6 +735,84 @@ pub async fn rollback(name: &str, force: bool) -> CmdResult<()> {
     Ok(())
 }
 
+/// Options for ZFS rewrite operation.
+#[derive(Debug, Clone, Default)]
+pub struct RewriteOptions {
+    /// Recurse into directories.
+    pub recursive: bool,
+    /// Verbose output (print each file as it is rewritten).
+    pub verbose: bool,
+    /// Stay on the same filesystem (do not cross mount boundaries, like find -xdev).
+    pub single_filesystem: bool,
+    /// Byte offset to start rewriting from (0 = beginning).
+    pub offset: Option<u64>,
+    /// Number of bytes to rewrite (None = entire file).
+    pub length: Option<u64>,
+}
+
+/// Rewrite data blocks in-place (useful after changing compression or encryption).
+/// Operates on file or directory paths, not dataset names.
+pub async fn rewrite(path: &str, options: &RewriteOptions) -> CmdResult<()> {
+    let mut args = vec!["rewrite".to_string()];
+
+    if options.recursive {
+        args.push("-r".to_string());
+    }
+    if options.verbose {
+        args.push("-v".to_string());
+    }
+    if options.single_filesystem {
+        args.push("-x".to_string());
+    }
+    if let Some(offset) = options.offset {
+        args.push("-o".to_string());
+        args.push(offset.to_string());
+    }
+    if let Some(length) = options.length {
+        args.push("-l".to_string());
+        args.push(length.to_string());
+    }
+
+    args.push(path.to_string());
+
+    let args_ref: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    run_ok("zfs", &args_ref).await?;
+    Ok(())
+}
+
+/// Get the raw output of `zpool upgrade` showing upgradable pools.
+pub async fn upgrade_status() -> CmdResult<String> {
+    // `zpool upgrade` may return exit code 0 even when no upgrades are needed,
+    // but on some systems it can fail if no pools exist.
+    let output = run_ok("zpool", &["upgrade"]).await?;
+    Ok(output.stdout)
+}
+
+/// Upgrade a specific pool's feature flags to the latest supported version.
+pub async fn upgrade_pool(name: &str) -> CmdResult<String> {
+    let output = run_ok("zpool", &["upgrade", name]).await?;
+    Ok(output.stdout)
+}
+
+/// Upgrade all pools' feature flags to the latest supported version.
+pub async fn upgrade_all_pools() -> CmdResult<String> {
+    let output = run_ok("zpool", &["upgrade", "-a"]).await?;
+    Ok(output.stdout)
+}
+
+/// Check if any pool has upgradable features.
+pub async fn has_upgradable_pools() -> bool {
+    let output = match upgrade_status().await {
+        Ok(o) => o,
+        Err(_) => return false,
+    };
+    // When everything is up to date, the output contains these phrases.
+    // If we see "POOL" in the output, it means there is a table listing pools to upgrade.
+    output.contains("POOL")
+        || (!output.contains("Every feature flags pool has all supported")
+            && !output.contains("All pools are formatted using feature flags"))
+}
+
 /// Get all devices used by ZFS pools (for filtering available disks).
 /// Returns device paths (e.g., /dev/sda, /dev/disk/by-id/..., etc.)
 pub async fn get_all_pool_devices() -> Vec<String> {
