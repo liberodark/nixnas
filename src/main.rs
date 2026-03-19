@@ -16,6 +16,7 @@ mod web;
 use api::{AppState, build_router};
 use services::metrics::MetricsStore;
 use services::monitoring::MonitoringService;
+use services::replication::ReplicationService;
 use services::smart_cache::SmartCache;
 use web::{WebState, build_web_router};
 
@@ -101,6 +102,9 @@ async fn main() -> anyhow::Result<()> {
         smart_cache,
     ));
     monitoring.start();
+
+    let replication = Arc::new(ReplicationService::new(app_state.state_manager.clone()));
+    replication.start();
 
     let api_router = build_router(app_state);
     let web_router = build_web_router(web_state);

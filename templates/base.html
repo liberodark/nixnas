@@ -26,7 +26,7 @@
         </nav>
 
         <!-- Storage -->
-        <div class="nav-category {% if active_page == "disks" || active_page == "smart" || active_page == "zfs" || active_page == "btrfs" || active_page == "raid" %}open{% endif %}" data-category="storage">
+        <div class="nav-category {% if active_page == "disks" || active_page == "smart" || active_page == "zfs" || active_page == "btrfs" || active_page == "raid" || active_page == "zfs_replication" %}open{% endif %}" data-category="storage">
             <div class="nav-category-header" onclick="toggleCategory(this)">
                 <span class="nav-icon">💾</span>
                 <span class="nav-label">Storage</span>
@@ -36,8 +36,9 @@
                 <li><a href="/storage/disks" {% if active_page == "disks" %}class="active"{% endif %}>Disks</a></li>
                 <li><a href="/storage/smart" {% if active_page == "smart" %}class="active"{% endif %}>S.M.A.R.T.</a></li>
                 <li><a href="/storage/zfs" {% if active_page == "zfs" %}class="active"{% endif %}>ZFS Pools</a></li>
-                <li><a href="/storage/btrfs" {% if active_page == "btrfs" %}class="active"{% endif %}>Btrfs</a></li>
+                <li><a href="/storage/btrfs" {% if active_page == "btrfs" %}class="active"{% endif %}>BTRFS</a></li>
                 <li><a href="/storage/raid" {% if active_page == "raid" %}class="active"{% endif %}>RAID Arrays</a></li>
+                <li><a href="/storage/zfs_replication" {% if active_page == "zfs_replication" %}class="active"{% endif %}>ZFS Replication</a></li>
             </ul>
         </div>
 

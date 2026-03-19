@@ -582,6 +582,92 @@ impl StateManager {
         self.save().await?;
         Ok(())
     }
+
+    pub async fn get_replication_tasks(&self) -> Vec<ReplicationTask> {
+        self.state.read().await.replication_tasks.clone()
+    }
+
+    pub async fn add_replication_task(&self, task: ReplicationTask) -> RpcResult<Uuid> {
+        let id = task.id;
+        let mut state = self.state.write().await;
+
+        if state.replication_tasks.iter().any(|t| t.name == task.name) {
+            return Err(RpcError::State(StateError::AlreadyExists(format!(
+                "Replication task '{}'",
+                task.name
+            ))));
+        }
+
+        state.replication_tasks.push(task);
+        drop(state);
+        self.save().await?;
+        Ok(id)
+    }
+
+    pub async fn update_replication_task(&self, task: ReplicationTask) -> RpcResult<()> {
+        let mut state = self.state.write().await;
+
+        let pos = state
+            .replication_tasks
+            .iter()
+            .position(|t| t.id == task.id)
+            .ok_or_else(|| {
+                RpcError::State(StateError::NotFound(format!(
+                    "Replication task {}",
+                    task.id
+                )))
+            })?;
+
+        state.replication_tasks[pos] = task;
+        drop(state);
+        self.save().await?;
+        Ok(())
+    }
+
+    pub async fn delete_replication_task(&self, id: Uuid) -> RpcResult<()> {
+        let mut state = self.state.write().await;
+
+        let pos = state
+            .replication_tasks
+            .iter()
+            .position(|t| t.id == id)
+            .ok_or_else(|| {
+                RpcError::State(StateError::NotFound(format!("Replication task {}", id)))
+            })?;
+
+        state.replication_tasks.remove(pos);
+        drop(state);
+        self.save().await?;
+        Ok(())
+    }
+
+    pub async fn update_replication_status(
+        &self,
+        id: Uuid,
+        status: &str,
+        last_snapshot: Option<&str>,
+        last_error: Option<&str>,
+    ) -> RpcResult<()> {
+        let mut state = self.state.write().await;
+
+        let task = state
+            .replication_tasks
+            .iter_mut()
+            .find(|t| t.id == id)
+            .ok_or_else(|| {
+                RpcError::State(StateError::NotFound(format!("Replication task {}", id)))
+            })?;
+
+        task.status = status.to_string();
+        if let Some(snap) = last_snapshot {
+            task.last_snapshot = snap.to_string();
+            task.last_sync = chrono::Utc::now().to_rfc3339();
+        }
+        task.last_error = last_error.unwrap_or("").to_string();
+        drop(state);
+        self.save().await?;
+        Ok(())
+    }
 }
 
 /// Root state structure persisted to state.json.
@@ -603,6 +689,9 @@ pub struct NasState {
     pub zfs_settings: ZfsSettings,
     #[serde(default)]
     pub snapshot_policies: Vec<SnapshotPolicy>,
+    /// Replication tasks
+    #[serde(default)]
+    pub replication_tasks: Vec<ReplicationTask>,
     /// System users (Unix users)
     #[serde(default)]
     pub system_users: Vec<SystemUser>,
@@ -952,6 +1041,73 @@ impl SnapshotPolicy {
             yearly: 0,
         }
     }
+}
+
+/// Replication task configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReplicationTask {
+    pub id: Uuid,
+    /// Display name
+    pub name: String,
+    /// Transport type: "local" or "ssh"
+    #[serde(default = "default_repl_transport")]
+    pub transport: String,
+    /// Source ZFS dataset (e.g., "tank/data")
+    pub source_dataset: String,
+    /// Target SSH host (e.g., "10.0.0.2" or "backup.example.com") — empty for local
+    #[serde(default)]
+    pub target_host: String,
+    /// Target ZFS dataset (e.g., "backup/data")
+    pub target_dataset: String,
+    /// SSH port (default: 22)
+    #[serde(default = "default_ssh_repl_port")]
+    pub ssh_port: u16,
+    /// Path to SSH private key for authentication
+    #[serde(default)]
+    pub ssh_key_path: String,
+    /// Send recursive (-R flag)
+    #[serde(default)]
+    pub recursive: bool,
+    /// Force receive (-F flag, rolls back target to match)
+    #[serde(default = "default_true")]
+    pub force_receive: bool,
+    /// Enable resumable receive (-s flag)
+    #[serde(default = "default_true")]
+    pub resumable: bool,
+    /// Replication interval in minutes (5, 15, 30, 60, etc.)
+    #[serde(default = "default_repl_interval")]
+    pub interval_minutes: u32,
+    /// Whether the task is active
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Last successfully sent snapshot name
+    #[serde(default)]
+    pub last_snapshot: String,
+    /// Timestamp of last successful sync (ISO 8601)
+    #[serde(default)]
+    pub last_sync: String,
+    /// Current status: "idle", "running", "error"
+    #[serde(default = "default_repl_status")]
+    pub status: String,
+    /// Last error message (empty if no error)
+    #[serde(default)]
+    pub last_error: String,
+}
+
+fn default_ssh_repl_port() -> u16 {
+    22
+}
+
+fn default_repl_interval() -> u32 {
+    60
+}
+
+fn default_repl_status() -> String {
+    "idle".to_string()
+}
+
+fn default_repl_transport() -> String {
+    "ssh".to_string()
 }
 
 /// Authentication configuration.

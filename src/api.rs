@@ -3,7 +3,7 @@ use crate::commands::{btrfs, filesystem, mdadm, smart, zfs};
 use crate::error::{RpcError, RpcResult};
 use crate::nix::NixGenerator;
 use crate::services::{nfs::NfsService, smb::SmbService};
-use crate::state::{NfsExport, SmbShare, StateManager};
+use crate::state::{NfsExport, ReplicationTask, SmbShare, StateManager};
 use axum::{
     Json, Router,
     extract::{ConnectInfo, State, WebSocketUpgrade},
@@ -214,6 +214,7 @@ async fn dispatch_rpc(state: &AppState, req: &RpcRequest) -> RpcResult<Value> {
         "smart" => dispatch_smart(method, params).await,
         "smb" => dispatch_smb(state, method, params).await,
         "nfs" => dispatch_nfs(state, method, params).await,
+        "replication" => dispatch_replication(state, method, params).await,
         "system" => dispatch_system(state, method, params).await,
         _ => Err(RpcError::ServiceNotFound(req.service.clone())),
     }
@@ -950,6 +951,78 @@ async fn dispatch_system(state: &AppState, method: &str, params: &Value) -> RpcR
             let id: u32 = extract_param(params, "id")?;
             let result = state.nix.switch_generation(id).await?;
             Ok(serde_json::to_value(result).unwrap())
+        }
+        _ => Err(RpcError::MethodNotFound(method.to_string())),
+    }
+}
+
+async fn dispatch_replication(state: &AppState, method: &str, params: &Value) -> RpcResult<Value> {
+    match method {
+        "list_tasks" => {
+            let tasks = state.state_manager.get_replication_tasks().await;
+            Ok(serde_json::to_value(tasks).unwrap())
+        }
+        "create_task" => {
+            let name: String = extract_param(params, "name")?;
+            let transport: String =
+                extract_param_opt(params, "transport").unwrap_or_else(|| "ssh".to_string());
+            let source_dataset: String = extract_param(params, "source_dataset")?;
+            let target_host: String = extract_param_opt(params, "target_host").unwrap_or_default();
+            let target_dataset: String = extract_param(params, "target_dataset")?;
+            let ssh_port: u16 = extract_param_opt(params, "ssh_port").unwrap_or(22);
+            let ssh_key_path: String =
+                extract_param_opt(params, "ssh_key_path").unwrap_or_default();
+            let recursive: bool = extract_param_opt(params, "recursive").unwrap_or(false);
+            let interval_minutes: u32 = extract_param_opt(params, "interval_minutes").unwrap_or(60);
+
+            let task = ReplicationTask {
+                id: Uuid::new_v4(),
+                name,
+                transport,
+                source_dataset,
+                target_host,
+                target_dataset,
+                ssh_port,
+                ssh_key_path,
+                recursive,
+                force_receive: true,
+                resumable: true,
+                interval_minutes,
+                enabled: true,
+                last_snapshot: String::new(),
+                last_sync: String::new(),
+                status: "idle".to_string(),
+                last_error: String::new(),
+            };
+            let id = state.state_manager.add_replication_task(task).await?;
+            Ok(serde_json::to_value(id).unwrap())
+        }
+        "delete_task" => {
+            let id: Uuid = extract_param(params, "id")?;
+            state.state_manager.delete_replication_task(id).await?;
+            Ok(Value::Bool(true))
+        }
+        "send_size_estimate" => {
+            let snapshot: String = extract_param(params, "snapshot")?;
+            let from: Option<String> = extract_param_opt(params, "from");
+            let size = zfs::send_size_estimate(&snapshot, from.as_deref()).await?;
+            Ok(serde_json::to_value(size).unwrap())
+        }
+        "list_bookmarks" => {
+            let dataset: Option<String> = extract_param_opt(params, "dataset");
+            let bookmarks = zfs::list_bookmarks(dataset.as_deref()).await?;
+            Ok(serde_json::to_value(bookmarks).unwrap())
+        }
+        "create_bookmark" => {
+            let snapshot: String = extract_param(params, "snapshot")?;
+            let bookmark: String = extract_param(params, "bookmark")?;
+            zfs::create_bookmark(&snapshot, &bookmark).await?;
+            Ok(Value::Bool(true))
+        }
+        "destroy_bookmark" => {
+            let name: String = extract_param(params, "name")?;
+            zfs::destroy_bookmark(&name).await?;
+            Ok(Value::Bool(true))
         }
         _ => Err(RpcError::MethodNotFound(method.to_string())),
     }

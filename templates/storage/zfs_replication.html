@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+
+{% block title %}Replication - NixNAS{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <h2>🔄 ZFS Replication</h2>
+    <div class="btn-group">
+        <button onclick="location.reload()" class="outline">
+            🔄 Refresh
+        </button>
+        <button onclick="document.getElementById('create-task-modal').showModal()">
+            ➕ New Task
+        </button>
+    </div>
+</header>
+
+{% if tasks.is_empty() %}
+<div class="card">
+    <p style="text-align: center; color: var(--pico-muted-color);">
+        No replication tasks configured. Create a task to replicate ZFS datasets to a remote host via SSH.
+    </p>
+</div>
+{% else %}
+
+<div id="tasks-container">
+    {% for task in tasks %}
+    <div class="card" id="task-{{ task.id }}" style="margin-bottom: 1rem;">
+        <header style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+            <h3 style="margin: 0;">
+                {{ task.name }}
+                {% if task.status == "running" %}
+                <span class="badge badge-info">Running</span>
+                {% else if task.status == "error" %}
+                <span class="badge badge-warning">Error</span>
+                {% else if task.enabled %}
+                <span class="badge badge-success">Active</span>
+                {% else %}
+                <span class="badge badge-secondary">Disabled</span>
+                {% endif %}
+            </h3>
+            <div class="btn-group">
+                <button class="small outline"
+                        hx-post="/api/web/replication/tasks/{{ task.id }}/run"
+                        hx-target="#task-actions-{{ task.id }}"
+                        hx-swap="innerHTML"
+                        {% if task.status == "running" %}disabled{% endif %}>
+                    ▶️ Run Now
+                </button>
+                <button class="small outline"
+                        hx-post="/api/web/replication/tasks/{{ task.id }}/toggle"
+                        hx-target="#task-actions-{{ task.id }}"
+                        hx-swap="innerHTML">
+                    {% if task.enabled %}⏸️ Disable{% else %}▶️ Enable{% endif %}
+                </button>
+                <button class="small outline"
+                        hx-post="/api/web/replication/tasks/{{ task.id }}/reset"
+                        hx-target="#task-actions-{{ task.id }}"
+                        hx-swap="innerHTML"
+                        hx-confirm="Reset task? Next run will do a full (non-incremental) send.">
+                    🔁 Reset
+                </button>
+                <button class="small outline secondary"
+                        hx-delete="/api/web/replication/tasks/{{ task.id }}"
+                        hx-target="#task-{{ task.id }}"
+                        hx-swap="outerHTML"
+                        hx-confirm="Delete replication task '{{ task.name }}'?">
+                    🗑️ Delete
+                </button>
+            </div>
+        </header>
+
+        <div id="task-actions-{{ task.id }}"></div>
+
+        <div class="compact-stats-grid">
+            <div class="stat-card">
+                <div class="label">Source</div>
+                <div class="value"><code>{{ task.source_dataset }}</code></div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Target</div>
+                <div class="value">
+                    {% if task.target_host.is_empty() %}
+                    <code>{{ task.target_dataset }}</code> <small>(local)</small>
+                    {% else %}
+                    <code>{{ task.target_host }}:{{ task.target_dataset }}</code>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Schedule</div>
+                <div class="value">{{ task.interval_human }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Last Sync</div>
+                <div class="value">{{ task.last_sync }}</div>
+            </div>
+        </div>
+
+        {% if !task.last_error.is_empty() %}
+        <details style="margin-top: 0.5rem;">
+            <summary style="color: var(--pico-del-color);">❌ Last Error</summary>
+            <pre style="white-space: pre-wrap; font-size: 0.8rem;">{{ task.last_error }}</pre>
+        </details>
+        {% endif %}
+
+        {% if !task.last_snapshot.is_empty() %}
+        <small style="color: var(--pico-muted-color);">Last snapshot: <code>{{ task.last_snapshot }}</code></small>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Create Task Modal -->
+<dialog id="create-task-modal">
+    <article style="max-width: 600px;">
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('create-task-modal').close()"></button>
+            <h3>➕ New Replication Task</h3>
+        </header>
+        <form hx-post="/api/web/replication/tasks"
+              hx-target="#create-task-result"
+              hx-disabled-elt="#create-task-btn">
+
+            <label>
+                Task Name
+                <input type="text" name="name" required placeholder="daily-backup">
+            </label>
+
+            <label>
+                Transport
+                <select name="transport" id="repl-transport" onchange="updateTransportFields()">
+                    <option value="local">Local (same machine, between pools)</option>
+                    <option value="ssh" selected>SSH (remote host)</option>
+                </select>
+            </label>
+
+            <label>
+                Source Dataset
+                <select name="source_dataset" required>
+                    <option value="">Select a dataset...</option>
+                    {% for ds in datasets %}
+                    <option value="{{ ds }}">{{ ds }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+
+            <div id="ssh-fields">
+                <label>
+                    Target Host
+                    <input type="text" name="target_host" id="repl-target-host" placeholder="10.0.0.2 or backup.example.com">
+                    <small>SSH host — ensure the target accepts key-based auth from this machine</small>
+                </label>
+            </div>
+
+            <label>
+                Target Dataset
+                <input type="text" name="target_dataset" required placeholder="backup/data">
+                <small>Must exist on the target (parent dataset for first receive)</small>
+            </label>
+
+            <div id="ssh-extra-fields">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <label>
+                        SSH Port
+                        <input type="number" name="ssh_port" value="22" min="1" max="65535">
+                    </label>
+                    <div></div>
+                </div>
+
+                <label>
+                    SSH Key Path (optional)
+                    <input type="text" name="ssh_key_path" placeholder="/root/.ssh/id_ed25519">
+                    <small>Leave empty to use the default SSH key</small>
+                </label>
+            </div>
+
+            <label>
+                Interval
+                <select name="interval_minutes">
+                    <option value="5">Every 5 min</option>
+                    <option value="15">Every 15 min</option>
+                    <option value="30">Every 30 min</option>
+                    <option value="60" selected>Hourly</option>
+                    <option value="360">Every 6 hours</option>
+                    <option value="720">Every 12 hours</option>
+                    <option value="1440">Daily</option>
+                </select>
+            </label>
+
+            <label>
+                <input type="checkbox" name="recursive" value="true">
+                Recursive (replicate child datasets and snapshots)
+            </label>
+
+            <div id="create-task-result"></div>
+
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('create-task-modal').close()">Cancel</button>
+                <button type="submit" id="create-task-btn">Create Task</button>
+            </footer>
+        </form>
+    </article>
+</dialog>
+
+<script>
+function updateTransportFields() {
+    var transport = document.getElementById('repl-transport').value;
+    var sshFields = document.getElementById('ssh-fields');
+    var sshExtraFields = document.getElementById('ssh-extra-fields');
+    var targetHost = document.getElementById('repl-target-host');
+
+    if (transport === 'local') {
+        sshFields.style.display = 'none';
+        sshExtraFields.style.display = 'none';
+        targetHost.removeAttribute('required');
+    } else {
+        sshFields.style.display = 'block';
+        sshExtraFields.style.display = 'block';
+        targetHost.setAttribute('required', 'required');
+    }
+}
+</script>
+
+{% endblock %}

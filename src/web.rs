@@ -5,8 +5,8 @@ use crate::services::metrics::MetricsStore;
 use crate::services::notifications::NotificationService;
 use crate::services::{nfs::NfsService, smb::SmbService};
 use crate::state::{
-    NfsClient, NfsExport, NotificationConfig, NotificationEvents, PrivilegeLevel, RsyncModule,
-    SambaUser, SharePrivilege, SmartDiskConfig, SmartPowerMode, SmbShare, SmtpConfig,
+    NfsClient, NfsExport, NotificationConfig, NotificationEvents, PrivilegeLevel, ReplicationTask,
+    RsyncModule, SambaUser, SharePrivilege, SmartDiskConfig, SmartPowerMode, SmbShare, SmtpConfig,
     SmtpEncryption, SnapshotPolicy, StateManager, SystemGroup, SystemUser, ZfsSettings,
 };
 use askama::Template;
@@ -216,6 +216,29 @@ struct RaidTemplate {
     active_page: String,
     mdadm_available: bool,
     arrays: Vec<ArrayInfo>,
+}
+
+#[derive(Template)]
+#[template(path = "storage/zfs_replication.html")]
+struct ReplicationTemplate {
+    active_page: String,
+    tasks: Vec<ReplicationTaskView>,
+    datasets: Vec<String>,
+}
+
+#[derive(Clone)]
+struct ReplicationTaskView {
+    id: String,
+    name: String,
+    source_dataset: String,
+    target_host: String,
+    target_dataset: String,
+    interval_human: String,
+    enabled: bool,
+    status: String,
+    last_sync: String,
+    last_snapshot: String,
+    last_error: String,
 }
 
 #[derive(Template)]
@@ -678,6 +701,24 @@ pub fn build_web_router(state: Arc<WebState>) -> Router {
         .route("/storage/zfs", get(zfs_page))
         .route("/storage/btrfs", get(btrfs_page))
         .route("/storage/raid", get(raid_page))
+        .route("/storage/zfs_replication", get(replication_page))
+        .route("/api/web/replication/tasks", post(create_replication_task))
+        .route(
+            "/api/web/replication/tasks/{id}",
+            delete(delete_replication_task),
+        )
+        .route(
+            "/api/web/replication/tasks/{id}/toggle",
+            post(toggle_replication_task),
+        )
+        .route(
+            "/api/web/replication/tasks/{id}/run",
+            post(run_replication_task),
+        )
+        .route(
+            "/api/web/replication/tasks/{id}/reset",
+            post(reset_replication_task),
+        )
         .route("/services", get(services_page))
         .route("/services/smb", get(smb_page))
         .route("/services/nfs", get(nfs_page))
@@ -3061,7 +3102,7 @@ async fn zfs_page(State(_state): State<Arc<WebState>>) -> impl IntoResponse {
         for p in pool_list {
             let pool_datasets: Vec<DatasetInfo> = all_datasets
                 .iter()
-                .filter(|d| d.name.starts_with(&p.name))
+                .filter(|d| d.name == p.name || d.name.starts_with(&format!("{}/", p.name)))
                 .map(|d| DatasetInfo {
                     name: d.name.clone(),
                     used_human: format_bytes(d.used),
@@ -3072,7 +3113,10 @@ async fn zfs_page(State(_state): State<Arc<WebState>>) -> impl IntoResponse {
 
             let pool_snapshots: Vec<SnapshotInfo> = all_snapshots
                 .iter()
-                .filter(|s| s.name.starts_with(&p.name))
+                .filter(|s| {
+                    s.name.starts_with(&format!("{}@", p.name))
+                        || s.name.starts_with(&format!("{}/", p.name))
+                })
                 .map(|s| SnapshotInfo {
                     name: s.name.clone(),
                     used_human: format_bytes(s.used),
@@ -3163,6 +3207,193 @@ async fn raid_page(State(_state): State<Arc<WebState>>) -> impl IntoResponse {
         mdadm_available,
         arrays,
     })
+}
+
+fn format_interval(minutes: u32) -> String {
+    match minutes {
+        m if m < 60 => format!("Every {} min", m),
+        60 => "Hourly".to_string(),
+        m if m < 1440 => format!("Every {} hours", m / 60),
+        1440 => "Daily".to_string(),
+        m => format!("Every {} days", m / 1440),
+    }
+}
+
+async fn replication_page(State(state): State<Arc<WebState>>) -> impl IntoResponse {
+    let tasks = state.state_manager.get_replication_tasks().await;
+    let task_views: Vec<ReplicationTaskView> = tasks
+        .into_iter()
+        .map(|t| ReplicationTaskView {
+            id: t.id.to_string(),
+            name: t.name,
+            source_dataset: t.source_dataset,
+            target_host: t.target_host,
+            target_dataset: t.target_dataset,
+            interval_human: format_interval(t.interval_minutes),
+            enabled: t.enabled,
+            status: t.status,
+            last_sync: if t.last_sync.is_empty() {
+                "Never".to_string()
+            } else {
+                t.last_sync
+            },
+            last_snapshot: t.last_snapshot,
+            last_error: t.last_error,
+        })
+        .collect();
+
+    let datasets: Vec<String> = zfs::list_datasets()
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|d| d.name)
+        .collect();
+
+    HtmlTemplate(ReplicationTemplate {
+        active_page: "zfs_replication".to_string(),
+        tasks: task_views,
+        datasets,
+    })
+}
+
+#[derive(Deserialize)]
+struct CreateReplicationForm {
+    name: String,
+    transport: String,
+    source_dataset: String,
+    #[serde(default)]
+    target_host: Option<String>,
+    target_dataset: String,
+    #[serde(default)]
+    ssh_port: Option<u16>,
+    #[serde(default)]
+    ssh_key_path: Option<String>,
+    #[serde(default)]
+    recursive: Option<String>,
+    #[serde(default)]
+    interval_minutes: Option<u32>,
+}
+
+async fn create_replication_task(
+    State(state): State<Arc<WebState>>,
+    Form(form): Form<CreateReplicationForm>,
+) -> impl IntoResponse {
+    let task = ReplicationTask {
+        id: Uuid::new_v4(),
+        name: form.name.clone(),
+        transport: form.transport,
+        source_dataset: form.source_dataset,
+        target_host: form.target_host.unwrap_or_default(),
+        target_dataset: form.target_dataset,
+        ssh_port: form.ssh_port.unwrap_or(22),
+        ssh_key_path: form.ssh_key_path.unwrap_or_default(),
+        recursive: form.recursive.is_some(),
+        force_receive: true,
+        resumable: true,
+        interval_minutes: form.interval_minutes.unwrap_or(60),
+        enabled: true,
+        last_snapshot: String::new(),
+        last_sync: String::new(),
+        status: "idle".to_string(),
+        last_error: String::new(),
+    };
+
+    match state.state_manager.add_replication_task(task).await {
+        Ok(_) => HtmlTemplate(BuildOutputTemplate {
+            success: true,
+            title: format!("Replication task '{}' created", form.name),
+            output: String::new(),
+            error: String::new(),
+        }),
+        Err(e) => HtmlTemplate(BuildOutputTemplate {
+            success: false,
+            title: "Create Task Failed".to_string(),
+            output: String::new(),
+            error: e.to_string(),
+        }),
+    }
+}
+
+async fn delete_replication_task(
+    State(state): State<Arc<WebState>>,
+    Path(id): Path<Uuid>,
+) -> impl IntoResponse {
+    match state.state_manager.delete_replication_task(id).await {
+        Ok(_) => Html("").into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+async fn toggle_replication_task(
+    State(state): State<Arc<WebState>>,
+    Path(id): Path<Uuid>,
+) -> impl IntoResponse {
+    let tasks = state.state_manager.get_replication_tasks().await;
+    if let Some(mut task) = tasks.into_iter().find(|t| t.id == id) {
+        task.enabled = !task.enabled;
+        let status = if task.enabled { "enabled" } else { "disabled" };
+        let _ = state.state_manager.update_replication_task(task).await;
+        Html(format!(
+            r#"<small style="color: var(--pico-ins-color);">✅ Task {}</small>"#,
+            status
+        ))
+        .into_response()
+    } else {
+        (StatusCode::NOT_FOUND, "Task not found").into_response()
+    }
+}
+
+async fn run_replication_task(
+    State(state): State<Arc<WebState>>,
+    Path(id): Path<Uuid>,
+) -> impl IntoResponse {
+    let tasks = state.state_manager.get_replication_tasks().await;
+    if let Some(task) = tasks.into_iter().find(|t| t.id == id) {
+        if task.status == "running" {
+            return Html(
+                r#"<small style="color: var(--pico-del-color);">❌ Task is already running</small>"#
+                    .to_string(),
+            )
+            .into_response();
+        }
+        let sm = state.state_manager.clone();
+        tokio::spawn(async move {
+            crate::services::replication::execute_replication(sm, task).await;
+        });
+        Html(
+            r#"<small style="color: var(--pico-ins-color);">✅ Replication started</small>"#
+                .to_string(),
+        )
+        .into_response()
+    } else {
+        (StatusCode::NOT_FOUND, "Task not found").into_response()
+    }
+}
+
+async fn reset_replication_task(
+    State(state): State<Arc<WebState>>,
+    Path(id): Path<Uuid>,
+) -> impl IntoResponse {
+    match state
+        .state_manager
+        .update_replication_status(id, "idle", None, None)
+        .await
+    {
+        Ok(_) => {
+            // Also clear last_snapshot to force a full resync
+            let tasks = state.state_manager.get_replication_tasks().await;
+            if let Some(mut task) = tasks.into_iter().find(|t| t.id == id) {
+                task.last_snapshot.clear();
+                task.last_error.clear();
+                task.status = "idle".to_string();
+                let _ = state.state_manager.update_replication_task(task).await;
+            }
+            Html(
+                r#"<small style="color: var(--pico-ins-color);">✅ Task reset — next run will do a full send</small>"#.to_string()
+            ).into_response()
+        }
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
 }
 
 async fn smb_page(State(state): State<Arc<WebState>>) -> impl IntoResponse {

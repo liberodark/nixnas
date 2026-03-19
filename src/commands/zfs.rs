@@ -735,6 +735,151 @@ pub async fn rollback(name: &str, force: bool) -> CmdResult<()> {
     Ok(())
 }
 
+/// Estimate the size of a send stream (dry-run).
+/// Returns the estimated size in bytes.
+pub async fn send_size_estimate(snapshot: &str, incremental_from: Option<&str>) -> CmdResult<u64> {
+    let mut args = vec!["send", "-nP"];
+
+    let from_owned: String;
+    if let Some(from) = incremental_from {
+        from_owned = from.to_string();
+        args.push("-i");
+        args.push(&from_owned);
+    }
+
+    args.push(snapshot);
+
+    let output = run_ok("zfs", &args).await?;
+
+    // Parse "size\t<bytes>" from the -P (parsable) output
+    for line in output.stdout.lines() {
+        if line.starts_with("size")
+            && let Some(size_str) = line.split('\t').nth(1)
+        {
+            return size_str.parse().map_err(|_| CommandError::Parse {
+                command: "zfs send -nP".to_string(),
+                message: format!("Cannot parse size: {}", size_str),
+            });
+        }
+    }
+
+    Ok(0)
+}
+
+/// Options for ZFS send/receive (local or over SSH).
+#[derive(Debug, Clone, Default)]
+pub struct SendReceiveOptions {
+    /// Source snapshot to send (e.g., "tank/data@snap1")
+    pub snapshot: String,
+    /// Incremental from this snapshot/bookmark (None = full send)
+    pub incremental_from: Option<String>,
+    /// Target SSH host (empty = local transfer between pools)
+    pub target_host: String,
+    /// Target dataset on the remote (or local) host
+    pub target_dataset: String,
+    /// SSH port (None = default 22, ignored for local)
+    pub ssh_port: Option<u16>,
+    /// Path to SSH private key (None = default key, ignored for local)
+    pub ssh_key: Option<String>,
+    /// Send recursive (-R flag)
+    pub recursive: bool,
+    /// Force receive (-F flag)
+    pub force_receive: bool,
+    /// Resumable receive (-s flag)
+    pub resumable: bool,
+}
+
+/// Perform a ZFS send/receive, either locally or over SSH.
+///
+/// When `target_host` is empty, runs: `zfs send [...] | zfs receive [...]`
+/// Otherwise, runs: `zfs send [...] | ssh <host> zfs receive [...]`
+pub async fn send_receive(options: &SendReceiveOptions) -> CmdResult<()> {
+    let mut send_part = String::from("zfs send");
+    if options.recursive {
+        send_part.push_str(" -R");
+    }
+    if let Some(ref from) = options.incremental_from {
+        send_part.push_str(&format!(" -i '{}'", from));
+    }
+    send_part.push_str(&format!(" '{}'", options.snapshot));
+
+    let mut recv_part = String::from("zfs receive");
+    if options.force_receive {
+        recv_part.push_str(" -F");
+    }
+    if options.resumable {
+        recv_part.push_str(" -s");
+    }
+    recv_part.push_str(&format!(" '{}'", options.target_dataset));
+
+    let cmd = if options.target_host.is_empty() {
+        format!("{} | {}", send_part, recv_part)
+    } else {
+        let mut ssh_part = String::from("ssh");
+        if let Some(port) = options.ssh_port {
+            ssh_part.push_str(&format!(" -p {}", port));
+        }
+        if let Some(ref key) = options.ssh_key {
+            ssh_part.push_str(&format!(" -i '{}'", key));
+        }
+        ssh_part.push_str(" -o StrictHostKeyChecking=accept-new -o BatchMode=yes");
+        ssh_part.push_str(&format!(" '{}'", options.target_host));
+        format!("{} | {} {}", send_part, ssh_part, recv_part)
+    };
+
+    run_ok("bash", &["-c", &cmd]).await?;
+    Ok(())
+}
+
+/// ZFS bookmark information.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Bookmark {
+    pub name: String,
+    pub dataset: String,
+    pub bookmark: String,
+    pub creation: String,
+}
+
+/// List all bookmarks, optionally filtered by dataset.
+pub async fn list_bookmarks(dataset: Option<&str>) -> CmdResult<Vec<Bookmark>> {
+    let mut args = vec!["list", "-Hp", "-t", "bookmark", "-o", "name,creation"];
+    if let Some(ds) = dataset {
+        args.push(ds);
+    }
+
+    let rows = run_table("zfs", &args).await.unwrap_or_default();
+
+    let mut bookmarks = Vec::new();
+    for row in rows {
+        if row.len() >= 2 {
+            let name = &row[0];
+            let parts: Vec<&str> = name.split('#').collect();
+            if parts.len() == 2 {
+                bookmarks.push(Bookmark {
+                    name: name.clone(),
+                    dataset: parts[0].to_string(),
+                    bookmark: parts[1].to_string(),
+                    creation: row[1].clone(),
+                });
+            }
+        }
+    }
+
+    Ok(bookmarks)
+}
+
+/// Create a bookmark from a snapshot.
+pub async fn create_bookmark(snapshot: &str, bookmark: &str) -> CmdResult<()> {
+    run_ok("zfs", &["bookmark", snapshot, bookmark]).await?;
+    Ok(())
+}
+
+/// Destroy a bookmark.
+pub async fn destroy_bookmark(name: &str) -> CmdResult<()> {
+    run_ok("zfs", &["destroy", name]).await?;
+    Ok(())
+}
+
 /// Options for ZFS rewrite operation.
 #[derive(Debug, Clone, Default)]
 pub struct RewriteOptions {
