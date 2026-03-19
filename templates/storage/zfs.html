@@ -138,6 +138,17 @@ networking.hostId = "$(head -c 8 /etc/machine-id)";</code></pre>
             </div>
         </details>
 
+        <!-- Pool History -->
+        <details style="margin-top: 1rem;">
+            <summary>📜 History</summary>
+            <div id="pool-history-{{ pool.name }}"
+                 hx-get="/api/web/zfs/pools/{{ pool.name }}/history"
+                 hx-trigger="revealed"
+                 style="background: var(--pico-background-color); padding: 1rem; border-radius: 0.375rem; overflow-x: auto;">
+                <span class="spinner"></span> Loading history...
+            </div>
+        </details>
+
         <!-- Datasets -->
         <details style="margin-top: 1rem;">
             <summary>📁 Datasets ({{ pool.datasets.len() }})</summary>
@@ -449,14 +460,31 @@ function setRetention(h, d, w, m, y) {
                 </label>
                 <label>
                     RAID Level
-                    <select name="level" required>
+                    <select name="level" required onchange="toggleDraidFields('create')">
                         <option value="stripe">Stripe (no redundancy)</option>
                         <option value="mirror">Mirror (RAID 1)</option>
                         <option value="raidz1">RAIDZ1 (RAID 5)</option>
                         <option value="raidz2" selected>RAIDZ2 (RAID 6)</option>
                         <option value="raidz3">RAIDZ3</option>
+                        <option value="draid1">dRAID1 (RAID 5)</option>
+                        <option value="draid2">dRAID2 (RAID 6)</option>
+                        <option value="draid3">dRAID3</option>
                     </select>
                 </label>
+            </div>
+            <div id="create-draid-fields" style="display: none;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <label>
+                        Spares
+                        <input type="number" name="draid_spares" value="1" min="0" max="5">
+                        <small>Hot spares distributed across all disks</small>
+                    </label>
+                    <label>
+                        Data per Group
+                        <input type="number" name="draid_data" min="1" placeholder="auto">
+                        <small>Leave empty for automatic (optional)</small>
+                    </label>
+                </div>
             </div>
 
             <label>
@@ -650,14 +678,31 @@ function setRetention(h, d, w, m, y) {
               style="display: block;">
             <label>
                 Vdev Type
-                <select name="level">
+                <select name="level" onchange="toggleDraidFields('vdev')">
                     <option value="stripe">Stripe (no redundancy)</option>
                     <option value="mirror">Mirror (RAID1)</option>
                     <option value="raidz1">RAIDZ1 (single parity)</option>
                     <option value="raidz2">RAIDZ2 (double parity)</option>
                     <option value="raidz3">RAIDZ3 (triple parity)</option>
+                    <option value="draid1">dRAID1 (distributed single parity)</option>
+                    <option value="draid2">dRAID2 (distributed double parity)</option>
+                    <option value="draid3">dRAID3 (distributed triple parity)</option>
                 </select>
             </label>
+            <div id="vdev-draid-fields" style="display: none;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <label>
+                        Spares
+                        <input type="number" name="draid_spares" value="1" min="0" max="5">
+                        <small>Hot spares distributed across all disks</small>
+                    </label>
+                    <label>
+                        Data per Group
+                        <input type="number" name="draid_data" min="1" placeholder="auto">
+                        <small>Leave empty for automatic (optional)</small>
+                    </label>
+                </div>
+            </div>
             <label>
                 Select Disks
                 <div id="zfs-vdev-disk-selector" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--pico-muted-border-color); border-radius: 0.25rem; padding: 0.5rem;">
@@ -843,6 +888,20 @@ function setRetention(h, d, w, m, y) {
 </dialog>
 
 <script>
+function toggleDraidFields(context) {
+    var select, fields;
+    if (context === 'create') {
+        select = document.querySelector('#create-modal select[name="level"]');
+        fields = document.getElementById('create-draid-fields');
+    } else {
+        select = document.querySelector('#zfs-add-vdev-form select[name="level"]');
+        fields = document.getElementById('vdev-draid-fields');
+    }
+    if (select && fields) {
+        fields.style.display = select.value.startsWith('draid') ? 'block' : 'none';
+    }
+}
+
 function openPropertiesModal(poolName) {
     document.getElementById('props-pool-name').textContent = poolName;
     document.getElementById('properties-modal').showModal();

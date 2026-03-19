@@ -127,6 +127,9 @@ pub enum RaidLevel {
     RaidZ1, // RAID-Z1 (single parity)
     RaidZ2, // RAID-Z2 (double parity)
     RaidZ3, // RAID-Z3 (triple parity)
+    DRaid1, // dRAID1 (distributed single parity)
+    DRaid2, // dRAID2 (distributed double parity)
+    DRaid3, // dRAID3 (distributed triple parity)
 }
 
 impl RaidLevel {
@@ -137,6 +140,27 @@ impl RaidLevel {
             Self::RaidZ1 => Some("raidz1"),
             Self::RaidZ2 => Some("raidz2"),
             Self::RaidZ3 => Some("raidz3"),
+            Self::DRaid1 => Some("draid1"),
+            Self::DRaid2 => Some("draid2"),
+            Self::DRaid3 => Some("draid3"),
+        }
+    }
+
+    /// Build the full vdev argument, including dRAID parameters if applicable.
+    pub fn vdev_arg(&self, draid_data: Option<u8>, draid_spares: Option<u8>) -> Option<String> {
+        match self {
+            Self::DRaid1 | Self::DRaid2 | Self::DRaid3 => {
+                let base = self.as_arg().unwrap();
+                let mut arg = base.to_string();
+                if let Some(d) = draid_data {
+                    arg.push_str(&format!(":{}d", d));
+                }
+                if let Some(s) = draid_spares {
+                    arg.push_str(&format!(":{}s", s));
+                }
+                Some(arg)
+            }
+            _ => self.as_arg().map(String::from),
         }
     }
 
@@ -147,6 +171,9 @@ impl RaidLevel {
             Self::RaidZ1 => 2,
             Self::RaidZ2 => 3,
             Self::RaidZ3 => 4,
+            Self::DRaid1 => 3,
+            Self::DRaid2 => 4,
+            Self::DRaid3 => 5,
         }
     }
 }
@@ -168,6 +195,10 @@ pub struct CreatePoolOptions {
     pub posix_acl: bool,
     /// Store xattrs in SA (system attributes)
     pub xattr_sa: bool,
+    /// dRAID: number of data devices per redundancy group
+    pub draid_data: Option<u8>,
+    /// dRAID: number of distributed spare devices
+    pub draid_spares: Option<u8>,
 }
 
 impl CreatePoolOptions {
@@ -181,6 +212,7 @@ impl CreatePoolOptions {
             atime_off: true,
             posix_acl: true,
             xattr_sa: true,
+            ..Self::default()
         }
     }
 }
@@ -241,8 +273,8 @@ pub async fn create_pool(
 
     args.push(name.to_string());
 
-    if let Some(level_arg) = level.as_arg() {
-        args.push(level_arg.to_string());
+    if let Some(level_arg) = level.vdev_arg(options.draid_data, options.draid_spares) {
+        args.push(level_arg);
     }
 
     for dev in devices {
@@ -402,12 +434,14 @@ pub async fn scrub_stop(name: &str) -> CmdResult<()> {
 /// Add a vdev to an existing pool.
 /// For stripe: just adds disks
 /// For mirror: adds a new mirror vdev
-/// For raidz: adds a new raidz vdev
+/// For raidz/draid: adds a new raidz or draid vdev
 pub async fn add_vdev(
     pool: &str,
     level: RaidLevel,
     devices: &[&str],
     force: bool,
+    draid_data: Option<u8>,
+    draid_spares: Option<u8>,
 ) -> CmdResult<()> {
     if devices.is_empty() {
         return Err(CommandError::NotSupported(
@@ -423,8 +457,8 @@ pub async fn add_vdev(
 
     args.push(pool.to_string());
 
-    if let Some(level_arg) = level.as_arg() {
-        args.push(level_arg.to_string());
+    if let Some(level_arg) = level.vdev_arg(draid_data, draid_spares) {
+        args.push(level_arg);
     }
 
     for dev in devices {
@@ -543,6 +577,12 @@ pub async fn online_device(pool: &str, device: &str, expand: bool) -> CmdResult<
 /// Get raw zpool status output for display.
 pub async fn pool_status_raw(name: &str) -> CmdResult<String> {
     let output = run_ok("zpool", &["status", name]).await?;
+    Ok(output.stdout)
+}
+
+/// Get pool command history (long format with user/host info).
+pub async fn pool_history(name: &str) -> CmdResult<String> {
+    let output = run_ok("zpool", &["history", "-l", name]).await?;
     Ok(output.stdout)
 }
 
@@ -1014,6 +1054,7 @@ pub async fn get_all_pool_devices() -> Vec<String> {
                     || trimmed == pool.name
                     || trimmed.starts_with("mirror")
                     || trimmed.starts_with("raidz")
+                    || trimmed.starts_with("draid")
                     || trimmed.starts_with("spare")
                     || trimmed.starts_with("cache")
                     || trimmed.starts_with("log")

@@ -335,10 +335,15 @@ async fn dispatch_zfs(method: &str, params: &Value) -> RpcResult<Value> {
                 "raidz1" => zfs::RaidLevel::RaidZ1,
                 "raidz2" => zfs::RaidLevel::RaidZ2,
                 "raidz3" => zfs::RaidLevel::RaidZ3,
+                "draid1" => zfs::RaidLevel::DRaid1,
+                "draid2" => zfs::RaidLevel::DRaid2,
+                "draid3" => zfs::RaidLevel::DRaid3,
                 _ => return Err(RpcError::InvalidParams(format!("Unknown level: {}", level))),
             };
             let dev_refs: Vec<&str> = devices.iter().map(|s| s.as_str()).collect();
-            let options = zfs::CreatePoolOptions::nas_defaults();
+            let mut options = zfs::CreatePoolOptions::nas_defaults();
+            options.draid_data = extract_param_opt(params, "draid_data");
+            options.draid_spares = extract_param_opt(params, "draid_spares");
             zfs::create_pool(&name, raid, &dev_refs, options).await?;
             Ok(Value::Bool(true))
         }
@@ -362,6 +367,11 @@ async fn dispatch_zfs(method: &str, params: &Value) -> RpcResult<Value> {
         "list_importable" => {
             let pools = zfs::list_importable().await?;
             Ok(serde_json::to_value(pools).unwrap())
+        }
+        "pool_history" => {
+            let name: String = extract_param(params, "name")?;
+            let history = zfs::pool_history(&name).await?;
+            Ok(Value::String(history))
         }
         "scrub_start" => {
             let name: String = extract_param(params, "name")?;

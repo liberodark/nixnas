@@ -832,6 +832,7 @@ pub fn build_web_router(state: Arc<WebState>) -> Router {
         .route("/api/web/zfs/pools/{name}/online", post(zfs_online_device))
         .route("/api/web/zfs/pools/{name}/clear", post(zfs_clear_errors))
         .route("/api/web/zfs/pools/{name}/status", get(zfs_pool_status_raw))
+        .route("/api/web/zfs/pools/{name}/history", get(zfs_pool_history))
         .route("/api/web/zfs/pools/{name}/vdevs", get(zfs_pool_vdevs))
         .route("/api/web/zfs/pools/{name}/devices", get(zfs_pool_devices))
         .route(
@@ -2061,6 +2062,17 @@ async fn zfs_pool_devices(Path(name): Path<String>) -> impl IntoResponse {
 async fn zfs_pool_status_raw(Path(name): Path<String>) -> impl IntoResponse {
     match zfs::pool_status_raw(&name).await {
         Ok(status) => Html(format!("<pre><code>{}</code></pre>", status)),
+        Err(e) => Html(format!("<p class=\"error\">Error: {}</p>", e)),
+    }
+}
+
+/// Get pool command history
+async fn zfs_pool_history(Path(name): Path<String>) -> impl IntoResponse {
+    match zfs::pool_history(&name).await {
+        Ok(history) => Html(format!(
+            "<pre style=\"font-size: 0.75rem; max-height: 400px; overflow-y: auto;\"><code>{}</code></pre>",
+            history
+        )),
         Err(e) => Html(format!("<p class=\"error\">Error: {}</p>", e)),
     }
 }
@@ -3508,6 +3520,10 @@ struct CreateZfsPoolForm {
     posix_acl: Option<String>,
     #[serde(default)]
     xattr_sa: Option<String>,
+    #[serde(default)]
+    draid_data: Option<String>,
+    #[serde(default)]
+    draid_spares: Option<String>,
 }
 
 async fn create_zfs_pool(
@@ -3535,6 +3551,9 @@ async fn create_zfs_pool(
         "raidz1" => zfs::RaidLevel::RaidZ1,
         "raidz2" => zfs::RaidLevel::RaidZ2,
         "raidz3" => zfs::RaidLevel::RaidZ3,
+        "draid1" => zfs::RaidLevel::DRaid1,
+        "draid2" => zfs::RaidLevel::DRaid2,
+        "draid3" => zfs::RaidLevel::DRaid3,
         _ => zfs::RaidLevel::Stripe,
     };
 
@@ -3546,6 +3565,8 @@ async fn create_zfs_pool(
         atime_off: form.atime_off.is_some(),
         posix_acl: form.posix_acl.is_some(),
         xattr_sa: form.xattr_sa.is_some(),
+        draid_data: form.draid_data.as_ref().and_then(|s| s.parse().ok()),
+        draid_spares: form.draid_spares.as_ref().and_then(|s| s.parse().ok()),
     };
 
     let device_refs: Vec<&str> = devices.iter().map(|s| s.as_str()).collect();
@@ -5636,6 +5657,10 @@ struct ZfsAddVdevForm {
     level: String,
     #[serde(default)]
     force: Option<String>,
+    #[serde(default)]
+    draid_data: Option<String>,
+    #[serde(default)]
+    draid_spares: Option<String>,
 }
 
 async fn zfs_add_vdev(
@@ -5664,13 +5689,18 @@ async fn zfs_add_vdev(
         "raidz1" => zfs::RaidLevel::RaidZ1,
         "raidz2" => zfs::RaidLevel::RaidZ2,
         "raidz3" => zfs::RaidLevel::RaidZ3,
+        "draid1" => zfs::RaidLevel::DRaid1,
+        "draid2" => zfs::RaidLevel::DRaid2,
+        "draid3" => zfs::RaidLevel::DRaid3,
         _ => zfs::RaidLevel::Stripe,
     };
 
     let device_refs: Vec<&str> = devices.iter().map(|s| s.as_str()).collect();
     let force = form.force.is_some();
+    let draid_data = form.draid_data.as_ref().and_then(|s| s.parse().ok());
+    let draid_spares = form.draid_spares.as_ref().and_then(|s| s.parse().ok());
 
-    match zfs::add_vdev(&name, level, &device_refs, force).await {
+    match zfs::add_vdev(&name, level, &device_refs, force, draid_data, draid_spares).await {
         Ok(_) => HtmlTemplate(BuildOutputTemplate {
             success: true,
             title: "Vdev Added".to_string(),

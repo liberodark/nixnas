@@ -1062,7 +1062,7 @@ dependencies = [
 
 [[package]]
 name = "nixnas-daemon"
-version = "1.0.9"
+version = "1.0.10"
 dependencies = [
  "anyhow",
  "argon2",
