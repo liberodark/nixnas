@@ -663,6 +663,7 @@ function setRetention(h, d, w, m, y) {
                 <option value="attach">Expand Mirror/RAIDZ</option>
                 <option value="spare">Add Hot Spare</option>
                 <option value="cache">Add Cache (L2ARC)</option>
+                <option value="log">Add Log (SLOG)</option>
                 <option value="replace">Replace Device</option>
                 <option value="detach">Detach Device</option>
                 <option value="offline">Set Device Offline</option>
@@ -764,6 +765,29 @@ function setRetention(h, d, w, m, y) {
             <footer>
                 <button type="button" class="secondary" onclick="document.getElementById('zfs-add-device-modal').close()">Cancel</button>
                 <button type="submit">Add Cache</button>
+            </footer>
+        </form>
+
+        <!-- Add Log Form -->
+        <form id="zfs-add-log-form"
+              hx-post=""
+              hx-target="#zfs-add-device-result"
+              hx-swap="innerHTML"
+              style="display: none;">
+            <label>
+                Log Device (NVMe/SSD recommended)
+                <select name="device" id="zfs-log-device" required>
+                    <option value="">Loading...</option>
+                </select>
+                <small>SLOG accelerates synchronous writes (NFS, iSCSI, databases)</small>
+            </label>
+            <label>
+                <input type="checkbox" name="force" value="true">
+                Force (use with caution)
+            </label>
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('zfs-add-device-modal').close()">Cancel</button>
+                <button type="submit">Add Log</button>
             </footer>
         </form>
 
@@ -968,6 +992,7 @@ function loadZfsDeviceSelectors() {
         .then(html => {
             document.getElementById('zfs-spare-device').innerHTML = html;
             document.getElementById('zfs-cache-device').innerHTML = html;
+            document.getElementById('zfs-log-device').innerHTML = html;
             document.getElementById('zfs-attach-new').innerHTML = html;
             document.getElementById('zfs-replace-new').innerHTML = html;
         });
@@ -996,6 +1021,7 @@ function updateZfsDeviceForm() {
         'vdev': 'zfs-add-vdev-form',
         'spare': 'zfs-add-spare-form',
         'cache': 'zfs-add-cache-form',
+        'log': 'zfs-add-log-form',
         'attach': 'zfs-attach-form',
         'replace': 'zfs-replace-form',
         'detach': 'zfs-detach-form',
@@ -1006,6 +1032,7 @@ function updateZfsDeviceForm() {
         'vdev': '/api/web/zfs/pools/' + currentZfsPool + '/add-vdev',
         'spare': '/api/web/zfs/pools/' + currentZfsPool + '/add-spare',
         'cache': '/api/web/zfs/pools/' + currentZfsPool + '/add-cache',
+        'log': '/api/web/zfs/pools/' + currentZfsPool + '/add-log',
         'attach': '/api/web/zfs/pools/' + currentZfsPool + '/attach',
         'replace': '/api/web/zfs/pools/' + currentZfsPool + '/replace',
         'detach': '/api/web/zfs/pools/' + currentZfsPool + '/detach',

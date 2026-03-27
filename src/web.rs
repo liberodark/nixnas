@@ -819,6 +819,7 @@ pub fn build_web_router(state: Arc<WebState>) -> Router {
         .route("/api/web/zfs/pools/{name}/add-vdev", post(zfs_add_vdev))
         .route("/api/web/zfs/pools/{name}/add-spare", post(zfs_add_spare))
         .route("/api/web/zfs/pools/{name}/add-cache", post(zfs_add_cache))
+        .route("/api/web/zfs/pools/{name}/add-log", post(zfs_add_log))
         .route("/api/web/zfs/pools/{name}/attach", post(zfs_attach_device))
         .route(
             "/api/web/zfs/pools/{name}/replace",
@@ -5764,6 +5765,27 @@ async fn zfs_add_cache(
         Err(e) => HtmlTemplate(BuildOutputTemplate {
             success: false,
             title: "Add Cache Failed".to_string(),
+            output: String::new(),
+            error: e.to_string(),
+        }),
+    }
+}
+
+async fn zfs_add_log(
+    Path(name): Path<String>,
+    Form(form): Form<ZfsAddSpecialForm>,
+) -> impl IntoResponse {
+    let force = form.force.is_some();
+    match zfs::add_log(&name, &form.device, force).await {
+        Ok(_) => HtmlTemplate(BuildOutputTemplate {
+            success: true,
+            title: "Log Added".to_string(),
+            output: format!("Added {} as SLOG to pool {}", form.device, name),
+            error: String::new(),
+        }),
+        Err(e) => HtmlTemplate(BuildOutputTemplate {
+            success: false,
+            title: "Add Log Failed".to_string(),
             output: String::new(),
             error: e.to_string(),
         }),

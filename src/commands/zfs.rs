@@ -491,7 +491,6 @@ pub async fn add_cache(pool: &str, device: &str, force: bool) -> CmdResult<()> {
 }
 
 /// Add a log device (SLOG) to a pool.
-#[allow(dead_code)]
 pub async fn add_log(pool: &str, device: &str, force: bool) -> CmdResult<()> {
     if force {
         run_ok("zpool", &["add", "-f", pool, "log", device]).await?;
