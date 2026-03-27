@@ -734,6 +734,10 @@ function setRetention(h, d, w, m, y) {
                 </select>
                 <small>Hot spare will be used automatically if a drive fails</small>
             </label>
+            <label>
+                <input type="checkbox" name="force" value="true">
+                Force (use with caution)
+            </label>
             <footer>
                 <button type="button" class="secondary" onclick="document.getElementById('zfs-add-device-modal').close()">Cancel</button>
                 <button type="submit">Add Spare</button>
@@ -752,6 +756,10 @@ function setRetention(h, d, w, m, y) {
                     <option value="">Loading...</option>
                 </select>
                 <small>L2ARC cache improves read performance</small>
+            </label>
+            <label>
+                <input type="checkbox" name="force" value="true">
+                Force (use with caution)
             </label>
             <footer>
                 <button type="button" class="secondary" onclick="document.getElementById('zfs-add-device-modal').close()">Cancel</button>

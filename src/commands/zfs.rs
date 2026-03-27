@@ -471,21 +471,33 @@ pub async fn add_vdev(
 }
 
 /// Add a spare device to a pool.
-pub async fn add_spare(pool: &str, device: &str) -> CmdResult<()> {
-    run_ok("zpool", &["add", pool, "spare", device]).await?;
+pub async fn add_spare(pool: &str, device: &str, force: bool) -> CmdResult<()> {
+    if force {
+        run_ok("zpool", &["add", "-f", pool, "spare", device]).await?;
+    } else {
+        run_ok("zpool", &["add", pool, "spare", device]).await?;
+    }
     Ok(())
 }
 
 /// Add a cache device (L2ARC) to a pool.
-pub async fn add_cache(pool: &str, device: &str) -> CmdResult<()> {
-    run_ok("zpool", &["add", pool, "cache", device]).await?;
+pub async fn add_cache(pool: &str, device: &str, force: bool) -> CmdResult<()> {
+    if force {
+        run_ok("zpool", &["add", "-f", pool, "cache", device]).await?;
+    } else {
+        run_ok("zpool", &["add", pool, "cache", device]).await?;
+    }
     Ok(())
 }
 
 /// Add a log device (SLOG) to a pool.
 #[allow(dead_code)]
-pub async fn add_log(pool: &str, device: &str) -> CmdResult<()> {
-    run_ok("zpool", &["add", pool, "log", device]).await?;
+pub async fn add_log(pool: &str, device: &str, force: bool) -> CmdResult<()> {
+    if force {
+        run_ok("zpool", &["add", "-f", pool, "log", device]).await?;
+    } else {
+        run_ok("zpool", &["add", pool, "log", device]).await?;
+    }
     Ok(())
 }
 

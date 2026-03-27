@@ -5724,13 +5724,16 @@ async fn zfs_add_vdev(
 #[derive(Deserialize, Debug)]
 struct ZfsAddSpecialForm {
     device: String,
+    #[serde(default)]
+    force: Option<String>,
 }
 
 async fn zfs_add_spare(
     Path(name): Path<String>,
     Form(form): Form<ZfsAddSpecialForm>,
 ) -> impl IntoResponse {
-    match zfs::add_spare(&name, &form.device).await {
+    let force = form.force.is_some();
+    match zfs::add_spare(&name, &form.device, force).await {
         Ok(_) => HtmlTemplate(BuildOutputTemplate {
             success: true,
             title: "Spare Added".to_string(),
@@ -5750,7 +5753,8 @@ async fn zfs_add_cache(
     Path(name): Path<String>,
     Form(form): Form<ZfsAddSpecialForm>,
 ) -> impl IntoResponse {
-    match zfs::add_cache(&name, &form.device).await {
+    let force = form.force.is_some();
+    match zfs::add_cache(&name, &form.device, force).await {
         Ok(_) => HtmlTemplate(BuildOutputTemplate {
             success: true,
             title: "Cache Added".to_string(),
