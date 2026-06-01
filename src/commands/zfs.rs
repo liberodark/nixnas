@@ -1039,11 +1039,10 @@ pub async fn has_upgradable_pools() -> bool {
         Ok(o) => o,
         Err(_) => return false,
     };
-    // When everything is up to date, the output contains these phrases.
-    // If we see "POOL" in the output, it means there is a table listing pools to upgrade.
-    output.contains("POOL")
-        || (!output.contains("Every feature flags pool has all supported")
-            && !output.contains("All pools are formatted using feature flags"))
+    // "(*)" features aren't applied by `zpool upgrade`, so ignore them.
+    output
+        .lines()
+        .any(|line| line.starts_with(char::is_whitespace) && !line.trim_end().ends_with("(*)"))
 }
 
 /// Get all devices used by ZFS pools (for filtering available disks).
