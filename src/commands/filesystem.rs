@@ -352,7 +352,7 @@ pub async fn get_usage() -> CmdResult<Vec<FsUsage>> {
 
     for line in lines.iter().skip(1) {
         let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() >= 6 {
+        if parts.len() >= 6 && parts[0] != "none" {
             result.push(FsUsage {
                 filesystem: parts[0].to_string(),
                 size: parts[1].parse().unwrap_or(0),
