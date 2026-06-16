@@ -1341,9 +1341,9 @@ impl NixGenerator {
 
     /// Execute nixos-rebuild with given arguments.
     async fn rebuild(&self, args: &[&str]) -> Result<RebuildResult, NixError> {
-        info!("Running nixos-rebuild-ng {}", args.join(" "));
+        info!("Running nixos-rebuild {}", args.join(" "));
 
-        let output = run("nixos-rebuild-ng", args)
+        let output = run("nixos-rebuild", args)
             .await
             .map_err(|e| NixError::Rebuild(e.to_string()))?;
 
@@ -1360,7 +1360,7 @@ impl NixGenerator {
 
     /// List available generations.
     pub async fn list_generations(&self) -> CmdResult<Vec<Generation>> {
-        let lines = run_lines("nixos-rebuild-ng", &["list-generations"]).await?;
+        let lines = run_lines("nixos-rebuild", &["list-generations"]).await?;
 
         let mut generations = Vec::new();
         for line in lines.iter().skip(1) {
