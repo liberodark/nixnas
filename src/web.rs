@@ -30,6 +30,7 @@ use uuid::Uuid;
 const STYLESHEET: &str = include_str!("../static/style.css");
 const PICO_CSS: &str = include_str!("../static/pico.min.css");
 const HTMX_JS: &str = include_str!("../static/htmx.min.js");
+const CHART_JS: &str = include_str!("../static/chart.umd.min.js");
 
 pub struct WebState {
     pub state_manager: Arc<StateManager>,
@@ -685,13 +686,25 @@ async fn serve_htmx_js() -> impl IntoResponse {
     )
 }
 
+/// Serve Chart.js
+async fn serve_chart_js() -> impl IntoResponse {
+    (
+        [(
+            header::CONTENT_TYPE,
+            "application/javascript; charset=utf-8",
+        )],
+        CHART_JS,
+    )
+}
+
 pub fn build_web_router(state: Arc<WebState>) -> Router {
     let public_routes = Router::new()
         .route("/login", get(login_page))
         .route("/logout", get(logout_handler))
         .route("/static/style.css", get(serve_css))
         .route("/static/pico.min.css", get(serve_pico_css))
-        .route("/static/htmx.min.js", get(serve_htmx_js));
+        .route("/static/htmx.min.js", get(serve_htmx_js))
+        .route("/static/chart.umd.min.js", get(serve_chart_js));
 
     let protected_routes = Router::new()
         .route("/", get(dashboard))
