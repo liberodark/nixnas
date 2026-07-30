@@ -21,7 +21,7 @@ thiserror = "2"
 anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-jsonwebtoken = { version = "10", features = ["rust_crypto"] }
+jsonwebtoken = { version = "11", features = ["rust_crypto"] }
 argon2 = "0.5"
 rand = "0.10"
 uuid = { version = "1", features = ["v4", "serde"] }
