@@ -1,5 +1,5 @@
 use crate::auth::AuthManager;
-use crate::commands::{btrfs, filesystem, mdadm, smart, zfs};
+use crate::commands::{bcachefs, btrfs, filesystem, mdadm, smart, zfs};
 use crate::error::{RpcError, RpcResult};
 use crate::nix::NixGenerator;
 use crate::services::{nfs::NfsService, smb::SmbService};
@@ -210,6 +210,7 @@ async fn dispatch_rpc(state: &AppState, req: &RpcRequest) -> RpcResult<Value> {
         "storage" => dispatch_storage(method, params).await,
         "zfs" => dispatch_zfs(method, params).await,
         "btrfs" => dispatch_btrfs(method, params).await,
+        "bcachefs" => dispatch_bcachefs(method, params).await,
         "mdadm" => dispatch_mdadm(method, params).await,
         "smart" => dispatch_smart(method, params).await,
         "smb" => dispatch_smb(state, method, params).await,
@@ -269,6 +270,7 @@ async fn dispatch_storage(method: &str, params: &Value) -> RpcResult<Value> {
                 "ext4" => filesystem::FsType::Ext4,
                 "xfs" => filesystem::FsType::Xfs,
                 "btrfs" => filesystem::FsType::Btrfs,
+                "bcachefs" => filesystem::FsType::Bcachefs,
                 "vfat" => filesystem::FsType::Vfat,
                 "ntfs" => filesystem::FsType::Ntfs,
                 _ => {
@@ -618,6 +620,97 @@ fn parse_btrfs_profile(s: &str) -> RpcResult<btrfs::BtrfsProfile> {
             "Unknown btrfs profile: {}",
             s
         ))),
+    }
+}
+
+async fn dispatch_bcachefs(method: &str, params: &Value) -> RpcResult<Value> {
+    if !bcachefs::is_available().await {
+        return Err(RpcError::Internal(
+            "Bcachefs tools not available".to_string(),
+        ));
+    }
+
+    match method {
+        "list_filesystems" => {
+            let fs = bcachefs::list_filesystems().await?;
+            Ok(serde_json::to_value(fs).unwrap())
+        }
+        "create" => {
+            let opts: bcachefs::CreateOptions = serde_json::from_value(params.clone())
+                .map_err(|e| RpcError::InvalidParams(e.to_string()))?;
+            bcachefs::create(&opts).await?;
+            Ok(Value::Bool(true))
+        }
+        "device_add" => {
+            let uuid: String = extract_param(params, "uuid")?;
+            let device: String = extract_param(params, "device")?;
+            let force: bool = extract_param_opt(params, "force").unwrap_or(false);
+            bcachefs::device_add(&uuid, &device, force).await?;
+            Ok(Value::Bool(true))
+        }
+        "device_remove" => {
+            let device: String = extract_param(params, "device")?;
+            bcachefs::device_remove(&device).await?;
+            Ok(Value::Bool(true))
+        }
+        "device_online" => {
+            let device: String = extract_param(params, "device")?;
+            bcachefs::device_online(&device).await?;
+            Ok(Value::Bool(true))
+        }
+        "device_offline" => {
+            let device: String = extract_param(params, "device")?;
+            bcachefs::device_offline(&device).await?;
+            Ok(Value::Bool(true))
+        }
+        "usage" => {
+            let uuid: String = extract_param(params, "uuid")?;
+            let usage = bcachefs::usage(&uuid).await?;
+            Ok(Value::String(usage))
+        }
+        "reconcile_status" => {
+            let uuid: String = extract_param(params, "uuid")?;
+            let status = bcachefs::reconcile_status(&uuid).await?;
+            Ok(Value::String(status))
+        }
+        "scrub_start" => {
+            let uuid: String = extract_param(params, "uuid")?;
+            bcachefs::scrub_start(&uuid).await?;
+            Ok(Value::Bool(true))
+        }
+        "scrub_status" => {
+            let uuid: String = extract_param(params, "uuid")?;
+            let status = bcachefs::scrub_status(&uuid).await?;
+            Ok(serde_json::to_value(status).unwrap())
+        }
+        "scrub_cancel" => {
+            let uuid: String = extract_param(params, "uuid")?;
+            bcachefs::scrub_cancel(&uuid).await?;
+            Ok(Value::Bool(true))
+        }
+        "list_subvolumes" => {
+            let path: String = extract_param(params, "path")?;
+            let snapshots: bool = extract_param_opt(params, "snapshots").unwrap_or(false);
+            Ok(bcachefs::list_subvolumes(&path, snapshots).await?)
+        }
+        "create_subvolume" => {
+            let path: String = extract_param(params, "path")?;
+            bcachefs::create_subvolume(&path).await?;
+            Ok(Value::Bool(true))
+        }
+        "delete_subvolume" => {
+            let path: String = extract_param(params, "path")?;
+            bcachefs::delete_subvolume(&path).await?;
+            Ok(Value::Bool(true))
+        }
+        "create_snapshot" => {
+            let source: String = extract_param(params, "source")?;
+            let dest: String = extract_param(params, "dest")?;
+            let readonly: bool = extract_param_opt(params, "readonly").unwrap_or(false);
+            bcachefs::create_snapshot(&source, &dest, readonly).await?;
+            Ok(Value::Bool(true))
+        }
+        _ => Err(RpcError::MethodNotFound(method.to_string())),
     }
 }
 

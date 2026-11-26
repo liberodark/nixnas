@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+
+{% block title %}Bcachefs - NixNAS{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <h2>🧊 Bcachefs Filesystems</h2>
+    <div class="btn-group">
+        <button onclick="location.reload()" class="outline">
+            🔄 Refresh
+        </button>
+        {% if bcachefs_available %}
+        <button class="primary" onclick="openCreateModal()">
+            ➕ Create Bcachefs
+        </button>
+        {% endif %}
+    </div>
+</header>
+
+{% if !bcachefs_available %}
+<article style="background: #f59e0b20; border-color: #f59e0b;">
+    <p>⚠️ <strong>Bcachefs tools not available.</strong></p>
+    <p>Add to your NixOS configuration:</p>
+    <pre><code>boot.supportedFilesystems = [ "bcachefs" ];</code></pre>
+</article>
+{% else %}
+
+{% if !module_loaded %}
+<article style="background: #3b82f620; border-color: #3b82f6;">
+    <p style="margin: 0;">ℹ️ The bcachefs kernel module is not loaded. It is loaded on the first mount; if mounting fails, add this to your NixOS configuration:</p>
+    <pre style="margin-bottom: 0;"><code>boot.supportedFilesystems = [ "bcachefs" ];</code></pre>
+</article>
+{% endif %}
+
+{% if filesystems.is_empty() %}
+<article>
+    <p>No Bcachefs filesystems found. Click "Create Bcachefs" to create one, optionally replicated across several disks.</p>
+</article>
+{% else %}
+
+<div class="bcachefs-list">
+    {% for fs in filesystems %}
+    <div class="card" id="bcachefs-{{ fs.uuid }}">
+        <header style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+            <h3 style="margin: 0;">
+                {% if fs.label != "—" %}{{ fs.label }}{% else %}<code>{{ fs.uuid }}</code>{% endif %}
+                <span class="badge badge-info">{{ fs.devices.len() }} device(s)</span>
+            </h3>
+            <div class="btn-group">
+                <button class="small outline"
+                        data-uuid="{{ fs.uuid }}"
+                        data-name="{% if fs.label != "—" %}{{ fs.label }}{% else %}{{ fs.uuid }}{% endif %}"
+                        onclick="openAddDeviceModal(this)">
+                    💾 Add Device
+                </button>
+                {% if fs.mounted %}
+                <button class="small outline"
+                        hx-get="/api/web/bcachefs/{{ fs.uuid }}/usage"
+                        hx-target="#bcachefs-actions-{{ fs.uuid }}">
+                    📊 Usage
+                </button>
+                <button class="small outline"
+                        hx-post="/api/web/bcachefs/{{ fs.uuid }}/scrub"
+                        hx-target="#bcachefs-actions-{{ fs.uuid }}">
+                    🔍 Scrub
+                </button>
+                <button class="small outline"
+                        hx-get="/api/web/bcachefs/{{ fs.uuid }}/scrub"
+                        hx-target="#bcachefs-actions-{{ fs.uuid }}">
+                    📋 Scrub Status
+                </button>
+                <button class="small outline secondary"
+                        hx-delete="/api/web/bcachefs/{{ fs.uuid }}/scrub"
+                        hx-target="#bcachefs-actions-{{ fs.uuid }}"
+                        hx-confirm="Cancel the running scrub?">
+                    ⏹ Cancel Scrub
+                </button>
+                {% endif %}
+            </div>
+        </header>
+
+        <div id="bcachefs-actions-{{ fs.uuid }}"></div>
+
+        <div class="compact-stats-grid">
+            <div class="stat-card">
+                <div class="label">Raw Size</div>
+                <div class="value">{{ fs.total_size }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Mountpoint</div>
+                <div class="value" style="font-size: 0.85rem;">
+                    {% if fs.mounted %}<code>{{ fs.mountpoint }}</code>{% else %}not mounted{% endif %}
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Replicas</div>
+                <div class="value" style="font-size: 0.85rem;">{{ fs.replicas }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Compression</div>
+                <div class="value">{{ fs.compression }}</div>
+            </div>
+        </div>
+
+        {% if !fs.mounted %}
+        <small>Mount this filesystem from the Disks page (any member device) to see its options and run a scrub.</small>
+        {% endif %}
+
+        <details>
+            <summary>Devices ({{ fs.devices.len() }})</summary>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Device</th>
+                        <th>Size</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for dev in fs.devices %}
+                    <tr>
+                        <td><code>{{ dev.path }}</code></td>
+                        <td>{{ dev.size_human }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </details>
+
+        <details>
+            <summary>UUID</summary>
+            <code style="word-break: break-all;">{{ fs.uuid }}</code>
+        </details>
+    </div>
+    {% endfor %}
+</div>
+
+{% endif %}
+{% endif %}
+
+<!-- Create Modal -->
+<dialog id="create-modal">
+    <article style="max-width: 600px;">
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('create-modal').close()"></button>
+            <h3>Create Bcachefs Filesystem</h3>
+        </header>
+        <form hx-post="/api/web/bcachefs/create"
+              hx-target="#bcachefs-result"
+              hx-disabled-elt="#create-bcachefs-btn">
+            <input type="hidden" name="devices" value="">
+
+            <label>
+                Label (optional)
+                <input type="text" name="label" placeholder="data">
+            </label>
+
+            <div class="grid">
+                <label>
+                    Replicas
+                    <input type="number" name="replicas" min="1" max="{{ max_replicas }}" value="1" required>
+                    <small>Copies of data and metadata. Needs at least as many disks.</small>
+                </label>
+                <label>
+                    Compression
+                    <select name="compression" required>
+                        <option value="none" selected>None</option>
+                        <option value="lz4">LZ4 (fast)</option>
+                        <option value="zstd">Zstandard (balanced)</option>
+                        <option value="gzip">Gzip (slow)</option>
+                    </select>
+                </label>
+            </div>
+
+            <label>
+                Select Disks
+                <div id="bcachefs-disk-selector">
+                    <span class="spinner"></span> Loading available disks...
+                </div>
+            </label>
+
+            <label>
+                <input type="checkbox" name="force" value="on">
+                Overwrite existing filesystem signatures on the selected disks
+            </label>
+
+            <article style="background: #3b82f620; border-color: #3b82f6; margin-top: 1rem;">
+                <p style="margin: 0;"><strong>📋 Replication:</strong></p>
+                <ul style="margin: 0.5rem 0 0 1rem; padding: 0;">
+                    <li><strong>1 replica:</strong> all disks pooled, no redundancy</li>
+                    <li><strong>2 replicas:</strong> min 2 disks, survives one disk failure</li>
+                    <li><strong>3 replicas:</strong> min 3 disks, survives two disk failures</li>
+                </ul>
+            </article>
+
+            <div id="bcachefs-result"></div>
+
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('create-modal').close()">Cancel</button>
+                <button type="submit" id="create-bcachefs-btn">
+                    <span class="htmx-indicator spinner"></span>
+                    Create Filesystem
+                </button>
+            </footer>
+        </form>
+    </article>
+</dialog>
+
+<!-- Add Device Modal -->
+<dialog id="bcachefs-add-device-modal">
+    <article>
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('bcachefs-add-device-modal').close()"></button>
+            <h3>💾 Add Device to <span id="bcachefs-fs-name"></span></h3>
+        </header>
+        <form hx-post="/api/web/bcachefs/add-device"
+              hx-target="#bcachefs-add-result"
+              hx-swap="innerHTML">
+            <input type="hidden" name="uuid" id="bcachefs-add-uuid">
+            <label>
+                Device to Add
+                <select name="device" id="bcachefs-add-device-select" required>
+                    <option value="">Loading...</option>
+                </select>
+                <small>Existing data is spread to the new device in the background.</small>
+            </label>
+            <label>
+                <input type="checkbox" name="force" value="on">
+                Overwrite existing filesystem signatures on this disk
+            </label>
+            <div id="bcachefs-add-result"></div>
+            <footer>
+                <button type="button" class="secondary" onclick="document.getElementById('bcachefs-add-device-modal').close()">Cancel</button>
+                <button type="submit">Add Device</button>
+            </footer>
+        </form>
+    </article>
+</dialog>
+
+<script>
+function openCreateModal() {
+    document.getElementById('create-modal').showModal();
+    htmx.ajax('GET', '/api/web/storage/available-disks', '#bcachefs-disk-selector');
+}
+
+function openAddDeviceModal(button) {
+    document.getElementById('bcachefs-fs-name').textContent = button.dataset.name;
+    document.getElementById('bcachefs-add-uuid').value = button.dataset.uuid;
+    document.getElementById('bcachefs-add-result').innerHTML = '';
+
+    fetch('/api/web/storage/available-disks-select')
+        .then(r => r.text())
+        .then(html => {
+            document.getElementById('bcachefs-add-device-select').innerHTML = html;
+        });
+
+    document.getElementById('bcachefs-add-device-modal').showModal();
+}
+</script>
+
+{% endblock %}

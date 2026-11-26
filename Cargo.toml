@@ -1,6 +1,6 @@
 [package]
 name = "nixnas-daemon"
-version = "1.0.15"
+version = "1.0.16"
 edition = "2024"
 authors = ["liberodark"]
 description = "NixOS NAS management daemon with web interface"
@@ -21,7 +21,7 @@ thiserror = "2"
 anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-jsonwebtoken = { version = "11", features = ["rust_crypto"] }
+jsonwebtoken = { version = "12", features = ["rust_crypto"] }
 argon2 = "0.6"
 rand = "0.10"
 uuid = { version = "1", features = ["v4", "serde"] }

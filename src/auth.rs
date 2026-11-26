@@ -2,7 +2,7 @@ use crate::error::RpcError;
 use crate::state::{AuthConfig, StateManager};
 use argon2::{
     Argon2,
-    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
+    password_hash::{PasswordHasher, PasswordVerifier, phc::PasswordHash},
 };
 use chrono::{Duration, Utc};
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
@@ -142,11 +142,8 @@ impl AuthManager {
 
     /// Hash a password using Argon2.
     pub fn hash_password(password: &str) -> Result<String, RpcError> {
-        let salt = SaltString::generate(&mut OsRng);
-        let argon2 = Argon2::default();
-
-        argon2
-            .hash_password(password.as_bytes(), &salt)
+        Argon2::default()
+            .hash_password(password.as_bytes())
             .map(|hash| hash.to_string())
             .map_err(|e| RpcError::Internal(format!("Failed to hash password: {}", e)))
     }
@@ -261,25 +258,19 @@ impl AuthManager {
             ip: ip.map(|i| i.to_string()),
         };
 
-        encode(
-            &Header::default(),
-            &claims,
-            &EncodingKey::from_secret(secret.as_bytes()),
-        )
-        .map_err(|e| RpcError::Internal(format!("Failed to generate token: {}", e)))
+        EncodingKey::from_secret(secret.as_bytes())
+            .and_then(|key| encode(&Header::default(), &claims, &key))
+            .map_err(|e| RpcError::Internal(format!("Failed to generate token: {}", e)))
     }
 
     /// Validate a JWT token and optionally check IP.
     pub async fn validate_token(&self, token: &str) -> Result<Claims, RpcError> {
         let auth = self.state.get_auth().await;
 
-        decode::<Claims>(
-            token,
-            &DecodingKey::from_secret(auth.jwt_secret.as_bytes()),
-            &Validation::default(),
-        )
-        .map(|data| data.claims)
-        .map_err(|_| RpcError::Unauthorized)
+        DecodingKey::from_secret(auth.jwt_secret.as_bytes())
+            .and_then(|key| decode::<Claims>(token, &key, &Validation::default()))
+            .map(|data| data.claims)
+            .map_err(|_| RpcError::Unauthorized)
     }
 
     /// Validate token with IP check

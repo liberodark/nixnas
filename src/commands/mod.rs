@@ -1,4 +1,5 @@
 pub mod acl;
+pub mod bcachefs;
 pub mod btrfs;
 pub mod filesystem;
 pub mod mdadm;

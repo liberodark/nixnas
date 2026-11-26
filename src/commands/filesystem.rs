@@ -226,6 +226,7 @@ pub enum FsType {
     Ext4,
     Xfs,
     Btrfs,
+    Bcachefs,
     Vfat,
     Ntfs,
 }
@@ -237,6 +238,7 @@ impl FsType {
             Self::Ext4 => "ext4",
             Self::Xfs => "xfs",
             Self::Btrfs => "btrfs",
+            Self::Bcachefs => "bcachefs",
             Self::Vfat => "vfat",
             Self::Ntfs => "ntfs",
         }
@@ -247,6 +249,7 @@ impl FsType {
             Self::Ext4 => "mkfs.ext4",
             Self::Xfs => "mkfs.xfs",
             Self::Btrfs => "mkfs.btrfs",
+            Self::Bcachefs => "mkfs.bcachefs",
             Self::Vfat => "mkfs.vfat",
             Self::Ntfs => "mkfs.ntfs",
         }
@@ -260,14 +263,14 @@ pub async fn mkfs(device: &str, fstype: FsType, label: Option<&str>) -> CmdResul
     match fstype {
         FsType::Ext4 => args.push("-F".to_string()),
         FsType::Xfs => args.push("-f".to_string()),
-        FsType::Btrfs => args.push("-f".to_string()),
+        FsType::Btrfs | FsType::Bcachefs => args.push("-f".to_string()),
         FsType::Ntfs => args.push("-F".to_string()),
         FsType::Vfat => {}
     }
 
     if let Some(l) = label {
         match fstype {
-            FsType::Ext4 | FsType::Btrfs | FsType::Xfs | FsType::Ntfs => {
+            FsType::Ext4 | FsType::Btrfs | FsType::Bcachefs | FsType::Xfs | FsType::Ntfs => {
                 args.push("-L".to_string());
                 args.push(l.to_string());
             }
@@ -305,6 +308,9 @@ pub async fn resize_fs(device: &str, fstype: &str) -> CmdResult<()> {
                 CommandError::NotSupported("Btrfs must be mounted to resize".into())
             })?;
             run_ok("btrfs", &["filesystem", "resize", "max", &mount.target]).await?;
+        }
+        "bcachefs" => {
+            run_ok("bcachefs", &["device", "resize", device]).await?;
         }
         _ => {
             return Err(CommandError::NotSupported(format!(
@@ -516,7 +522,7 @@ pub async fn format_device(
             a.push(device);
             ("mkfs", a)
         }
-        "btrfs" => {
+        "btrfs" | "bcachefs" => {
             let mut a = vec![];
             if force {
                 a.push("-f");
@@ -526,7 +532,12 @@ pub async fn format_device(
                 a.push(l);
             }
             a.push(device);
-            ("mkfs.btrfs", a)
+            let cmd = if fstype == "btrfs" {
+                "mkfs.btrfs"
+            } else {
+                "mkfs.bcachefs"
+            };
+            (cmd, a)
         }
         "ntfs" => {
             let mut a = vec!["-Q"]; // Quick format

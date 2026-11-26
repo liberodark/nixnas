@@ -56,6 +56,7 @@ in
         msmtp
         nixos-rebuild-ng
         btrfs-progs
+        bcachefs-tools
         e2fsprogs
         xfsprogs
         dosfstools

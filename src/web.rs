@@ -1,5 +1,5 @@
 use crate::auth::AuthManager;
-use crate::commands::{btrfs, filesystem, mdadm, samba, smart, zfs};
+use crate::commands::{bcachefs, btrfs, filesystem, mdadm, samba, smart, zfs};
 use crate::nix::NixGenerator;
 use crate::services::metrics::MetricsStore;
 use crate::services::notifications::NotificationService;
@@ -209,6 +209,16 @@ struct BtrfsTemplate {
     active_page: String,
     btrfs_available: bool,
     filesystems: Vec<BtrfsInfo>,
+}
+
+#[derive(Template)]
+#[template(path = "storage/bcachefs.html")]
+struct BcachefsTemplate {
+    active_page: String,
+    bcachefs_available: bool,
+    module_loaded: bool,
+    max_replicas: u8,
+    filesystems: Vec<BcachefsInfo>,
 }
 
 #[derive(Template)]
@@ -500,6 +510,22 @@ struct BtrfsDeviceInfo {
     size_human: String,
 }
 
+struct BcachefsInfo {
+    uuid: String,
+    label: String,
+    mountpoint: String,
+    mounted: bool,
+    total_size: String,
+    replicas: String,
+    compression: String,
+    devices: Vec<BcachefsDeviceInfo>,
+}
+
+struct BcachefsDeviceInfo {
+    path: String,
+    size_human: String,
+}
+
 #[derive(Clone)]
 struct GenerationInfo {
     id: u32,
@@ -713,6 +739,7 @@ pub fn build_web_router(state: Arc<WebState>) -> Router {
         .route("/storage/smart", get(smart_page))
         .route("/storage/zfs", get(zfs_page))
         .route("/storage/btrfs", get(btrfs_page))
+        .route("/storage/bcachefs", get(bcachefs_page))
         .route("/storage/raid", get(raid_page))
         .route("/storage/zfs_replication", get(replication_page))
         .route("/api/web/replication/tasks", post(create_replication_task))
@@ -822,6 +849,15 @@ pub fn build_web_router(state: Arc<WebState>) -> Router {
         .route("/api/web/zfs/settings", post(update_zfs_settings))
         .route("/api/web/btrfs/create", post(create_btrfs))
         .route("/api/web/btrfs/add-device", post(btrfs_add_device))
+        .route("/api/web/bcachefs/create", post(create_bcachefs))
+        .route("/api/web/bcachefs/add-device", post(bcachefs_add_device))
+        .route(
+            "/api/web/bcachefs/{uuid}/scrub",
+            get(bcachefs_scrub_status)
+                .post(bcachefs_scrub_start)
+                .delete(bcachefs_scrub_cancel),
+        )
+        .route("/api/web/bcachefs/{uuid}/usage", get(bcachefs_usage))
         .route("/api/web/mdadm/arrays", post(create_mdadm_array))
         .route("/api/web/mdadm/arrays/{name}", delete(delete_mdadm_array))
         .route(
@@ -2847,6 +2883,173 @@ async fn btrfs_add_device(Form(form): Form<BtrfsAddDeviceForm>) -> impl IntoResp
             error: e.to_string(),
         }),
     }
+}
+
+/// Render the outcome of a storage command as an HTML fragment.
+fn command_output(
+    result: Result<String, crate::error::CommandError>,
+    success_title: &str,
+    failure_title: &str,
+) -> HtmlTemplate<BuildOutputTemplate> {
+    let (success, title, output, error) = match result {
+        Ok(output) => (true, success_title, output, String::new()),
+        Err(e) => (false, failure_title, String::new(), e.to_string()),
+    };
+
+    HtmlTemplate(BuildOutputTemplate {
+        success,
+        title: title.to_string(),
+        output,
+        error,
+    })
+}
+
+async fn bcachefs_page() -> impl IntoResponse {
+    let bcachefs_available = bcachefs::is_available().await;
+
+    let filesystems = if bcachefs_available {
+        bcachefs::list_filesystems()
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .map(|fs| {
+                let (replicas, compression) = fs
+                    .options
+                    .map(|o| {
+                        (
+                            format!(
+                                "{} data / {} metadata",
+                                o.data_replicas, o.metadata_replicas
+                            ),
+                            o.compression,
+                        )
+                    })
+                    .unwrap_or_else(|| ("—".to_string(), "—".to_string()));
+
+                BcachefsInfo {
+                    uuid: fs.uuid,
+                    label: opt_to_string(&fs.label),
+                    mounted: fs.mountpoint.is_some(),
+                    mountpoint: opt_to_string(&fs.mountpoint),
+                    total_size: format_bytes(fs.devices.iter().map(|d| d.size).sum()),
+                    replicas,
+                    compression,
+                    devices: fs
+                        .devices
+                        .into_iter()
+                        .map(|d| BcachefsDeviceInfo {
+                            path: d.path,
+                            size_human: format_bytes(d.size),
+                        })
+                        .collect(),
+                }
+            })
+            .collect()
+    } else {
+        vec![]
+    };
+
+    HtmlTemplate(BcachefsTemplate {
+        active_page: "bcachefs".to_string(),
+        bcachefs_available,
+        module_loaded: bcachefs::is_module_loaded(),
+        max_replicas: bcachefs::MAX_REPLICAS,
+        filesystems,
+    })
+}
+
+#[derive(Deserialize, Debug)]
+struct CreateBcachefsForm {
+    #[serde(default)]
+    label: Option<String>,
+    replicas: u8,
+    compression: bcachefs::Compression,
+    #[serde(default)]
+    devices: String,
+    #[serde(default)]
+    force: Option<String>,
+}
+
+async fn create_bcachefs(Form(form): Form<CreateBcachefsForm>) -> impl IntoResponse {
+    let opts = bcachefs::CreateOptions {
+        devices: form
+            .devices
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect(),
+        label: form.label,
+        replicas: form.replicas,
+        compression: form.compression,
+        force: form.force.is_some(),
+    };
+
+    let result = bcachefs::create(&opts).await.map(|_| {
+        format!(
+            "Created on {} device(s) with {} replica(s), compression: {}",
+            opts.devices.len(),
+            opts.replicas,
+            opts.compression.as_str()
+        )
+    });
+
+    command_output(
+        result,
+        "Bcachefs filesystem created successfully",
+        "Create Bcachefs Failed",
+    )
+}
+
+#[derive(Deserialize, Debug)]
+struct BcachefsAddDeviceForm {
+    uuid: String,
+    device: String,
+    #[serde(default)]
+    force: Option<String>,
+}
+
+async fn bcachefs_add_device(Form(form): Form<BcachefsAddDeviceForm>) -> impl IntoResponse {
+    let result = bcachefs::device_add(&form.uuid, &form.device, form.force.is_some())
+        .await
+        .map(|_| format!("Added {} to filesystem {}", form.device, form.uuid));
+
+    command_output(result, "Device added to Bcachefs", "Add Device Failed")
+}
+
+async fn bcachefs_scrub_start(Path(uuid): Path<String>) -> impl IntoResponse {
+    let result = bcachefs::scrub_start(&uuid)
+        .await
+        .map(|_| "Scrub is running in the background. Use Scrub Status to follow it.".to_string());
+
+    command_output(result, "Scrub started", "Start Scrub Failed")
+}
+
+async fn bcachefs_scrub_status(Path(uuid): Path<String>) -> impl IntoResponse {
+    match bcachefs::scrub_status(&uuid).await {
+        Ok(status) => {
+            let title = if status.running {
+                "Scrub is running"
+            } else {
+                "No scrub running"
+            };
+            command_output(Ok(status.log), title, "")
+        }
+        Err(e) => command_output(Err(e), "", "Scrub Status Failed"),
+    }
+}
+
+async fn bcachefs_scrub_cancel(Path(uuid): Path<String>) -> impl IntoResponse {
+    let result = bcachefs::scrub_cancel(&uuid).await.map(|_| String::new());
+
+    command_output(result, "Scrub cancelled", "Cancel Scrub Failed")
+}
+
+async fn bcachefs_usage(Path(uuid): Path<String>) -> impl IntoResponse {
+    command_output(
+        bcachefs::usage(&uuid).await,
+        "Filesystem usage",
+        "Usage Failed",
+    )
 }
 
 #[derive(Deserialize, Debug)]

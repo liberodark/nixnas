@@ -103,6 +103,9 @@ pub enum CommandError {
 
     #[error("Operation not supported: {0}")]
     NotSupported(String),
+
+    #[error("Invalid argument: {0}")]
+    InvalidArgument(String),
 }
 
 /// Error type for state management.

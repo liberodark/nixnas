@@ -7,6 +7,7 @@ Web-based NAS management daemon for NixOS.
 - **Storage Management**
   - ZFS pools and datasets
   - Btrfs filesystems and subvolumes
+  - Bcachefs filesystems, replication, compression, subvolumes and snapshots
   - mdadm software RAID
   - ext4, XFS filesystem support
   - S.M.A.R.T. disk monitoring
@@ -152,6 +153,23 @@ curl -X POST http://localhost:8080/api/rpc \
 - `create_subvolume` / `delete_subvolume` - Manage subvolumes
 - `create_snapshot` - Create snapshot
 - `scrub_start` / `balance_start` - Maintenance
+
+### bcachefs
+- `list_filesystems` - List Bcachefs filesystems (mounted or not)
+- `create` - Create a filesystem (`devices`, `label`, `replicas`, `compression`, `force`)
+- `device_add` / `device_remove` - Manage member devices
+- `device_online` / `device_offline` - Change device availability
+- `usage` / `reconcile_status` - Space usage and background work
+- `scrub_start` / `scrub_status` / `scrub_cancel` - Checksum verification
+- `list_subvolumes` - List subvolumes
+- `create_subvolume` / `delete_subvolume` - Manage subvolumes
+- `create_snapshot` - Create snapshot
+
+Bcachefs is an out-of-tree kernel module. Enable it on the host with:
+
+```nix
+boot.supportedFilesystems = [ "bcachefs" ];
+```
 
 ### mdadm
 - `list_arrays` - List RAID arrays
